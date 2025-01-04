@@ -278,11 +278,14 @@ impl TransactionRecorder {
     }
 }
 
+// PohRecorderBank is an enum that holds either the WorkingBank or the LastResetBank
+// Bank that is currently leader 
 pub enum PohRecorderBank {
     WorkingBank(BankStart),
     LastResetBank(Arc<Bank>),
 }
 
+// implemenation of PohRecorderBank and just a function that returns the right bank
 impl PohRecorderBank {
     pub fn bank(&self) -> &Bank {
         match self {
@@ -291,9 +294,11 @@ impl PohRecorderBank {
         }
     }
 
+    // getter that gets returns either None or the WorkingBank (BankStart struct)   
     pub fn working_bank_start(&self) -> Option<&BankStart> {
         match self {
             PohRecorderBank::WorkingBank(bank_start) => Some(bank_start),
+            // last recent bank skipped, because it isn't "recent" and it isn't working at the moment  
             PohRecorderBank::LastResetBank(_last_reset_bank) => None,
         }
     }
