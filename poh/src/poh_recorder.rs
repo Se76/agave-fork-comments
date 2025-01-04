@@ -183,7 +183,7 @@ impl TransactionRecorder {
 
         if !transactions.is_empty() {
 
-            // measures time it takes to hash all txs. with the help of merkle tree -> so only one hash
+            // measures time it takes to hash all txs. with the help of merkle tree -> so only one hash. it will be used further as "mixin"
             let (hash, hash_us) = measure_us!(hash_transactions(&transactions)); 
             record_transactions_timings.hash_us = hash_us; // writes time that it took to hash to the RecordTransactionsTimings
 
@@ -193,12 +193,14 @@ impl TransactionRecorder {
             let (res, poh_record_us) = measure_us!(self.record(bank_slot, hash, transactions));
             record_transactions_timings.poh_record_us = poh_record_us;
 
-
+            // matching on an index of the first tracked transaction in the slot 
             match res {
+                // if no error -> than just returning the index / I mean not return but just присвоить starting_index to the starting_transaction_index
                 Ok(starting_index) => {
                     starting_transaction_index = starting_index;
                 }
                 Err(PohRecorderError::MaxHeightReached) => {
+                    // just handling errors 
                     return RecordTransactionsSummary {
                         record_transactions_timings,
                         result: Err(PohRecorderError::MaxHeightReached),
@@ -206,6 +208,7 @@ impl TransactionRecorder {
                     };
                 }
                 Err(PohRecorderError::SendError(e)) => {
+                    // just handling errors 
                     return RecordTransactionsSummary {
                         record_transactions_timings,
                         result: Err(PohRecorderError::SendError(e)),
@@ -215,7 +218,7 @@ impl TransactionRecorder {
                 Err(e) => panic!("Poh recorder returned unexpected error: {e:?}"),
             }
         }
-
+        // if there weren't any erros then this struct will be returned
         RecordTransactionsSummary {
             record_transactions_timings,
             result: Ok(()),
