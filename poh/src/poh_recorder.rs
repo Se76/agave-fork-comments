@@ -163,7 +163,7 @@ pub struct TransactionRecorder {
 }
 
 impl TransactionRecorder {
-    // setter of a new TransactionRecorder
+    // just a setter fot a new TransactionRecorder
     pub fn new(record_sender: Sender<Record>, is_exited: Arc<AtomicBool>) -> Self {
         Self {
             record_sender,
@@ -187,9 +187,12 @@ impl TransactionRecorder {
             let (hash, hash_us) = measure_us!(hash_transactions(&transactions)); 
             record_transactions_timings.hash_us = hash_us; // writes time that it took to hash to the RecordTransactionsTimings
 
-
+            // res will be an index of the first tracked transaction in the slot 
+            // and poh_record_us is just a time that it took to record a Record with ".record" function
+            // -> this is made with the help of measure_us macro
             let (res, poh_record_us) = measure_us!(self.record(bank_slot, hash, transactions));
             record_transactions_timings.poh_record_us = poh_record_us;
+
 
             match res {
                 Ok(starting_index) => {
@@ -224,18 +227,20 @@ impl TransactionRecorder {
 
     // I would say that this function 
     // 1. Checks if the validator is shutting down
-    // 2. Returns sended Result<Option<usize>> / Record::sender - Sender<Result<Option<usize>>>
+    // 2. Returns Result<Option<usize>> //////// Record::sender - Sender<Result<Option<usize>>>
     pub fn record(
         &self,
         bank_slot: Slot,
         mixin: Hash,
         transactions: Vec<VersionedTransaction>,
     ) -> Result<Option<usize>> {
+       //Result<Option<usize>, PohRecorderError>
         // create a new channel so that there is only 1 sender and when it goes out of scope, the receiver fails
         let (result_sender, result_receiver) = bounded(1);
         let res =
             self.record_sender
                 .send(Record::new(mixin, transactions, bank_slot, result_sender));
+            // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! the line above sends the Record to record_receiver 
         if res.is_err() {
             // If the channel is dropped, then the validator is shutting down so return that we are hitting
             //  the max tick height to stop transaction processing and flush any transactions in the pipeline.
@@ -244,9 +249,12 @@ impl TransactionRecorder {
         // Besides validator exit, this timeout should primarily be seen to affect test execution environments where the various pieces can be shutdown abruptly
         let mut is_exited = false;
         loop {
+        // We need a loop here because we don't lnow when we will get acknowledgement, it may take more than just 1000ms, so for this purpose we keeping checking for response
             let res = result_receiver.recv_timeout(Duration::from_millis(1000));
+            // The line above ensures that result_send sent the Record and the record came -> "waits on approvement"
             match res {
                 Err(RecvTimeoutError::Timeout) => {
+                    // checks if it is excited -> return an error   
                     if is_exited {
                         return Err(PohRecorderError::MaxHeightReached);
                     } else {
@@ -259,7 +267,8 @@ impl TransactionRecorder {
                     return Err(PohRecorderError::MaxHeightReached);
                 }
                 Ok(result) => {
-                    return result;
+                    // result: Result<Option<usize>, PohRecorderError>
+                    return result; 
                 }
             }
         }
