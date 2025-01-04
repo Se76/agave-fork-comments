@@ -45,32 +45,42 @@ use {
     thiserror::Error,
 };
 
+// ???
 pub const GRACE_TICKS_FACTOR: u64 = 2;
+// Maximal slots number to ensure smoother transitions between slot leaders (6.25 Milliseconds one tick * 64 ticks per slot * 2 grace slots) = 800 ms
 pub const MAX_GRACE_SLOTS: u64 = 2;
 
+// adding some errors
 #[derive(Error, Debug, Clone)]
 pub enum PohRecorderError {
+    // if tick of the next slot is reached
     #[error("max height reached")]
     MaxHeightReached,
-
+    // if the first tick of the slot isn't reached
     #[error("min height not reached")]
     MinHeightNotReached,
-
+    // error of already working bank
     #[error("send WorkingBankEntry error")]
     SendError(#[from] SendError<WorkingBankEntry>),
 }
 
+// adding a new result type generic over an error "PohRecorderError"
 type Result<T> = std::result::Result<T, PohRecorderError>;
 
+// adding a new type WorkingBankEntry that will be "Proof-Of-History-ed"
 pub type WorkingBankEntry = (Arc<Bank>, (Entry, u64));
 
+// Adding a struct with currently working bank and creation time
 #[derive(Debug, Clone)]
 pub struct BankStart {
+    // Working bank
     pub working_bank: Arc<Bank>,
+    // just time to measure elapsed time afterwards 
     pub bank_creation_time: Arc<Instant>,
 }
 
 impl BankStart {
+    // checks whether the current working bank has already worked for more then a slot (400ms)
     fn get_working_bank_if_not_expired(&self) -> Option<&Bank> {
         if self.should_working_bank_still_be_processing_txs() {
             Some(&self.working_bank)
@@ -79,6 +89,7 @@ impl BankStart {
         }
     }
 
+    // checks whether the current working bank has already worked for more then a slot (400ms)
     pub fn should_working_bank_still_be_processing_txs(&self) -> bool {
         Bank::should_bank_still_be_processing_txs(
             &self.bank_creation_time,
@@ -91,6 +102,7 @@ impl BankStart {
 // transaction, if being tracked by WorkingBank
 type RecordResultSender = Sender<Result<Option<usize>>>;
 
+// a record of some transactions
 pub struct Record {
     pub mixin: Hash,
     pub transactions: Vec<VersionedTransaction>,
@@ -98,6 +110,7 @@ pub struct Record {
     pub sender: RecordResultSender,
 }
 impl Record {
+    // just a set method
     pub fn new(
         mixin: Hash,
         transactions: Vec<VersionedTransaction>,
@@ -120,6 +133,7 @@ pub struct RecordTransactionsTimings {
     pub poh_record_us: u64,
 }
 
+// not used in this file
 impl RecordTransactionsTimings {
     pub fn accumulate(&mut self, other: &RecordTransactionsTimings) {
         saturating_add_assign!(
@@ -144,10 +158,12 @@ pub struct RecordTransactionsSummary {
 pub struct TransactionRecorder {
     // shared by all users of PohRecorder
     pub record_sender: Sender<Record>,
+    // if PohRecorder is exited(ended)
     pub is_exited: Arc<AtomicBool>,
 }
 
 impl TransactionRecorder {
+    // setter of a new TransactionRecorder
     pub fn new(record_sender: Sender<Record>, is_exited: Arc<AtomicBool>) -> Self {
         Self {
             record_sender,
@@ -166,8 +182,11 @@ impl TransactionRecorder {
         let mut starting_transaction_index = None;
 
         if !transactions.is_empty() {
-            let (hash, hash_us) = measure_us!(hash_transactions(&transactions));
-            record_transactions_timings.hash_us = hash_us;
+
+            // measures time it takes to hash all txs. with the help of merkle tree -> so only one hash
+            let (hash, hash_us) = measure_us!(hash_transactions(&transactions)); 
+            record_transactions_timings.hash_us = hash_us; // writes time that it took to hash to the RecordTransactionsTimings
+
 
             let (res, poh_record_us) = measure_us!(self.record(bank_slot, hash, transactions));
             record_transactions_timings.poh_record_us = poh_record_us;
@@ -202,6 +221,10 @@ impl TransactionRecorder {
     }
 
     // Returns the index of `transactions.first()` in the slot, if being tracked by WorkingBank
+
+    // I would say that this function 
+    // 1. Checks if the validator is shutting down
+    // 2. Returns sended Result<Option<usize>> / Record::sender - Sender<Result<Option<usize>>>
     pub fn record(
         &self,
         bank_slot: Slot,
@@ -322,7 +345,7 @@ impl PohRecorder {
                 bank.slot(),
                 &bank,
                 Some(&self.blockstore),
-                GRACE_TICKS_FACTOR * MAX_GRACE_SLOTS,
+                GRACE_TICKS_FACTOR * MAX_GRACE_SLOTS, // 2 * 2 = 4 , max_slot_range is 4, because the leader is selected for the next four slots/blocks
             );
             assert_eq!(self.ticks_per_slot, bank.ticks_per_slot());
             let (
@@ -608,8 +631,8 @@ impl PohRecorder {
                 let last_tick_height = (last_slot + 1) * ticks_per_slot;
                 let num_slots = last_slot - first_slot + 1;
                 let grace_ticks = cmp::min(
-                    ticks_per_slot * MAX_GRACE_SLOTS,
-                    ticks_per_slot * num_slots / GRACE_TICKS_FACTOR,
+                    ticks_per_slot * MAX_GRACE_SLOTS, // 64 * 2 = 128
+                    ticks_per_slot * num_slots / GRACE_TICKS_FACTOR, // 64 * 2 / 2 = 64
                 );
                 let leader_first_tick_height_including_grace_ticks =
                     leader_first_tick_height + grace_ticks;
