@@ -399,11 +399,13 @@ impl PohRecorder {
                 leader_last_tick_height,// last tick for which the leader is responsible
                 grace_ticks, // 128 ticks min
             ) = Self::compute_leader_slot_tick_heights(next_leader_slot, self.ticks_per_slot);
+            // setting values
             self.grace_ticks = grace_ticks;
             self.leader_first_tick_height_including_grace_ticks =
                 leader_first_tick_height_including_grace_ticks;
             self.leader_last_tick_height = leader_last_tick_height;
 
+            // it is a macro that logs an information, in the following case the time it took from the start to clear the bank
             datapoint_info!(
                 "leader-slot-start-to-cleared-elapsed-ms",
                 ("slot", bank.slot(), i64),
@@ -412,11 +414,15 @@ impl PohRecorder {
         }
 
         if let Some(ref signal) = self.clear_bank_signal {
+            // tries to send a signal via the channel Sender<bool>
             match signal.try_send(true) {
+                // if it succeeds than it is ok
                 Ok(_) => {}
+                // just an error that occurs when the channel is full
                 Err(TrySendError::Full(_)) => {
                     trace!("replay wake up signal channel is full.")
                 }
+                // an error that occurs when the channel is disconnected
                 Err(TrySendError::Disconnected(_)) => {
                     trace!("replay wake up signal channel is disconnected.")
                 }
