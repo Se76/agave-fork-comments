@@ -430,6 +430,7 @@ impl PohRecorder {
         }
     }
 
+    // returns true if the validator would be the leader in n ticks
     pub fn would_be_leader(&self, within_next_n_ticks: u64) -> bool {
         self.has_bank()
             || self.leader_first_tick_height_including_grace_ticks.map_or(
