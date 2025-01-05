@@ -346,6 +346,7 @@ pub struct PohRecorder {
     grace_ticks: u64,
     // sth for sancronising PoH with ledger...
     blockstore: Arc<Blockstore>,
+    // contains information about cached leaders schedulers and also about the current
     leader_schedule_cache: Arc<LeaderScheduleCache>,
     // it is not constant! it will be explained in the defentions document
     ticks_per_slot: u64,
@@ -368,16 +369,23 @@ pub struct PohRecorder {
     last_metric: Instant,
     // a (crossbeam)-channel of a thread to send records
     record_sender: Sender<Record>,
+    //
     leader_bank_notifier: Arc<LeaderBankNotifier>,
+    //
     delay_leader_block_for_pending_fork: bool,
+    //
     last_reported_slot_for_pending_fork: Arc<Mutex<Slot>>,
+    // if is finished
     pub is_exited: Arc<AtomicBool>,
 }
 
 impl PohRecorder {
     fn clear_bank(&mut self) {
+        // checks if the working bank isn't None
         if let Some(WorkingBank { bank, start, .. }) = self.working_bank.take() {
+            // sets the slot for which the bank is responsible as completed and notifies all other threads / nodes
             self.leader_bank_notifier.set_completed(bank.slot());
+            // this function returns a tupple of next leader slot and the last slot in the sceduler
             let next_leader_slot = self.leader_schedule_cache.next_leader_slot(
                 bank.collector_id(),
                 bank.slot(),
@@ -385,11 +393,11 @@ impl PohRecorder {
                 Some(&self.blockstore),
                 GRACE_TICKS_FACTOR * MAX_GRACE_SLOTS, // 2 * 2 = 4 , max_slot_range is 4, because the leader is selected for the next four slots/blocks
             );
-            assert_eq!(self.ticks_per_slot, bank.ticks_per_slot());
+            assert_eq!(self.ticks_per_slot, bank.ticks_per_slot()); // 64 == 64 by the default 
             let (
-                leader_first_tick_height_including_grace_ticks,
-                leader_last_tick_height,
-                grace_ticks,
+                leader_first_tick_height_including_grace_ticks, // ticks for the 4 slots + grace ticks(2 * 64) ~ 4 * 64 + 128 
+                leader_last_tick_height,// last tick for which the leader is responsible
+                grace_ticks, // 128 ticks min
             ) = Self::compute_leader_slot_tick_heights(next_leader_slot, self.ticks_per_slot);
             self.grace_ticks = grace_ticks;
             self.leader_first_tick_height_including_grace_ticks =
@@ -667,11 +675,14 @@ impl PohRecorder {
             .map(|(first_slot, last_slot)| {
                 let leader_first_tick_height = first_slot * ticks_per_slot + 1;
                 let last_tick_height = (last_slot + 1) * ticks_per_slot;
-                let num_slots = last_slot - first_slot + 1;
+                let num_slots = last_slot - first_slot + 1; // should be 4 actually 
                 let grace_ticks = cmp::min(
                     ticks_per_slot * MAX_GRACE_SLOTS, // 64 * 2 = 128
-                    ticks_per_slot * num_slots / GRACE_TICKS_FACTOR, // 64 * 2 / 2 = 64
+                    ticks_per_slot * num_slots / GRACE_TICKS_FACTOR, // 64 * 4 / 2 = 128
                 );
+
+                // we can get maximum of 800 ticks per leader (ticks_per_slot * GRACE_TICKS_FACTOR ; 400 * 2 = 800)
+
                 let leader_first_tick_height_including_grace_ticks =
                     leader_first_tick_height + grace_ticks;
                 (
