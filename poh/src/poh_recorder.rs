@@ -333,16 +333,25 @@ pub struct PohRecorder {
     start_bank_active_descendants: Vec<Slot>,
     start_tick_height: u64, // first tick_height this recorder will observe
     tick_cache: Vec<(Entry, u64)>, // cache of entry and its tick_height
+    // bank taht is current working 
     working_bank: Option<WorkingBank>,
+    // entry which should be recorded in PoH
     sender: Sender<WorkingBankEntry>,
+    // when sender sends a record / entry
     poh_timing_point_sender: Option<PohTimingSender>,
+    // just leader_first_tick_height_including_grace_ticks :)
     leader_first_tick_height_including_grace_ticks: Option<u64>,
     leader_last_tick_height: u64, // zero if none
+    // amount of tciks that were added to ensure transition btw leader and non-leader
     grace_ticks: u64,
+    // sth for sancronising PoH with ledger...
     blockstore: Arc<Blockstore>,
     leader_schedule_cache: Arc<LeaderScheduleCache>,
+    // it is not constant! it will be explained in the defentions document
     ticks_per_slot: u64,
+    // nanoseconds per tick
     target_ns_per_tick: u64,
+    // the next couple of lines are for the time measuring
     record_lock_contention_us: u64,
     flush_cache_no_tick_us: u64,
     flush_cache_tick_us: u64,
@@ -351,8 +360,13 @@ pub struct PohRecorder {
     total_sleep_us: u64,
     record_us: u64,
     report_metrics_us: u64,
+
+
+    // ticks that are elapsed after the PoH record
     ticks_from_record: u64,
+    // time of creating the PohRecorder
     last_metric: Instant,
+    // a (crossbeam)-channel of a thread to send records
     record_sender: Sender<Record>,
     leader_bank_notifier: Arc<LeaderBankNotifier>,
     delay_leader_block_for_pending_fork: bool,
