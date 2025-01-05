@@ -187,7 +187,7 @@ impl TransactionRecorder {
             let (hash, hash_us) = measure_us!(hash_transactions(&transactions)); 
             record_transactions_timings.hash_us = hash_us; // writes time that it took to hash to the RecordTransactionsTimings
 
-            // res will be an index of the first tracked transaction in the slot 
+            // res will be an index of the first tracked transaction in the current slot 
             // and poh_record_us is just a time that it took to record a Record with ".record" function
             // -> this is made with the help of measure_us macro
             let (res, poh_record_us) = measure_us!(self.record(bank_slot, hash, transactions));
@@ -304,6 +304,7 @@ impl PohRecorderBank {
     }
 }
 
+// Everything is understandable :)
 pub struct WorkingBank {
     pub bank: BankWithScheduler,
     pub start: Arc<Instant>,
@@ -312,6 +313,7 @@ pub struct WorkingBank {
     pub transaction_index: Option<usize>,
 }
 
+// an enum PohLeaderStatus that describes current leader status
 #[derive(Debug, PartialEq, Eq)]
 pub enum PohLeaderStatus {
     NotReached,
@@ -319,10 +321,15 @@ pub enum PohLeaderStatus {
 }
 
 pub struct PohRecorder {
+    // poh is kind of a prepared object for proof of history 
     pub poh: Arc<Mutex<Poh>>,
+    // current number of tick for the current proof of history record 
     tick_height: u64,
+    // if bank was cleared -> true will be sent / in new_with_signal will be set to the some value
     clear_bank_signal: Option<Sender<bool>>,
-    start_bank: Arc<Bank>, // parent slot
+    // parent slot
+    start_bank: Arc<Bank>, 
+    // the length of the slot
     start_bank_active_descendants: Vec<Slot>,
     start_tick_height: u64, // first tick_height this recorder will observe
     tick_cache: Vec<(Entry, u64)>, // cache of entry and its tick_height
