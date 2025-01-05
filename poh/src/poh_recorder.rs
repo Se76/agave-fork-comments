@@ -45,32 +45,42 @@ use {
     thiserror::Error,
 };
 
+// ???
 pub const GRACE_TICKS_FACTOR: u64 = 2;
+// Maximal slots number to ensure smoother transitions between slot leaders (6.25 Milliseconds one tick * 64 ticks per slot * 2 grace slots) = 800 ms
 pub const MAX_GRACE_SLOTS: u64 = 2;
 
+// adding some errors
 #[derive(Error, Debug, Clone)]
 pub enum PohRecorderError {
+    // if tick of the next slot is reached
     #[error("max height reached")]
     MaxHeightReached,
-
+    // if the first tick of the slot isn't reached
     #[error("min height not reached")]
     MinHeightNotReached,
-
+    // error of already working bank
     #[error("send WorkingBankEntry error")]
     SendError(#[from] SendError<WorkingBankEntry>),
 }
 
+// adding a new result type generic over an error "PohRecorderError"
 type Result<T> = std::result::Result<T, PohRecorderError>;
 
+// adding a new type WorkingBankEntry that will be "Proof-Of-History-ed"
 pub type WorkingBankEntry = (Arc<Bank>, (Entry, u64));
 
+// Adding a struct with currently working bank and creation time
 #[derive(Debug, Clone)]
 pub struct BankStart {
+    // Working bank
     pub working_bank: Arc<Bank>,
+    // just time to measure elapsed time afterwards 
     pub bank_creation_time: Arc<Instant>,
 }
 
 impl BankStart {
+    // checks whether the current working bank has already worked for more then a slot (400ms)
     fn get_working_bank_if_not_expired(&self) -> Option<&Bank> {
         if self.should_working_bank_still_be_processing_txs() {
             Some(&self.working_bank)
@@ -79,6 +89,7 @@ impl BankStart {
         }
     }
 
+    // checks whether the current working bank has already worked for more then a slot (400ms)
     pub fn should_working_bank_still_be_processing_txs(&self) -> bool {
         Bank::should_bank_still_be_processing_txs(
             &self.bank_creation_time,
@@ -91,6 +102,7 @@ impl BankStart {
 // transaction, if being tracked by WorkingBank
 type RecordResultSender = Sender<Result<Option<usize>>>;
 
+// a record of some transactions
 pub struct Record {
     pub mixin: Hash,
     pub transactions: Vec<VersionedTransaction>,
@@ -98,6 +110,7 @@ pub struct Record {
     pub sender: RecordResultSender,
 }
 impl Record {
+    // just a set method
     pub fn new(
         mixin: Hash,
         transactions: Vec<VersionedTransaction>,
@@ -120,6 +133,7 @@ pub struct RecordTransactionsTimings {
     pub poh_record_us: u64,
 }
 
+// not used in this file
 impl RecordTransactionsTimings {
     pub fn accumulate(&mut self, other: &RecordTransactionsTimings) {
         saturating_add_assign!(
@@ -144,10 +158,12 @@ pub struct RecordTransactionsSummary {
 pub struct TransactionRecorder {
     // shared by all users of PohRecorder
     pub record_sender: Sender<Record>,
+    // if PohRecorder is exited(ended)
     pub is_exited: Arc<AtomicBool>,
 }
 
 impl TransactionRecorder {
+    // just a setter fot a new TransactionRecorder
     pub fn new(record_sender: Sender<Record>, is_exited: Arc<AtomicBool>) -> Self {
         Self {
             record_sender,
@@ -166,17 +182,25 @@ impl TransactionRecorder {
         let mut starting_transaction_index = None;
 
         if !transactions.is_empty() {
-            let (hash, hash_us) = measure_us!(hash_transactions(&transactions));
-            record_transactions_timings.hash_us = hash_us;
 
+            // measures time it takes to hash all txs. with the help of merkle tree -> so only one hash. it will be used further as "mixin"
+            let (hash, hash_us) = measure_us!(hash_transactions(&transactions)); 
+            record_transactions_timings.hash_us = hash_us; // writes time that it took to hash to the RecordTransactionsTimings
+
+            // res will be an index of the first tracked transaction in the current slot 
+            // and poh_record_us is just a time that it took to record a Record with ".record" function
+            // -> this is made with the help of measure_us macro
             let (res, poh_record_us) = measure_us!(self.record(bank_slot, hash, transactions));
             record_transactions_timings.poh_record_us = poh_record_us;
 
+            // matching on an index of the first tracked transaction in the slot 
             match res {
+                // if no error -> than just returning the index / I mean not return but just присвоить starting_index to the starting_transaction_index
                 Ok(starting_index) => {
                     starting_transaction_index = starting_index;
                 }
                 Err(PohRecorderError::MaxHeightReached) => {
+                    // just handling errors 
                     return RecordTransactionsSummary {
                         record_transactions_timings,
                         result: Err(PohRecorderError::MaxHeightReached),
@@ -184,6 +208,7 @@ impl TransactionRecorder {
                     };
                 }
                 Err(PohRecorderError::SendError(e)) => {
+                    // just handling errors 
                     return RecordTransactionsSummary {
                         record_transactions_timings,
                         result: Err(PohRecorderError::SendError(e)),
@@ -193,7 +218,7 @@ impl TransactionRecorder {
                 Err(e) => panic!("Poh recorder returned unexpected error: {e:?}"),
             }
         }
-
+        // if there weren't any erros then this struct will be returned
         RecordTransactionsSummary {
             record_transactions_timings,
             result: Ok(()),
@@ -202,17 +227,23 @@ impl TransactionRecorder {
     }
 
     // Returns the index of `transactions.first()` in the slot, if being tracked by WorkingBank
+
+    // I would say that this function 
+    // 1. Checks if the validator is shutting down
+    // 2. Returns Result<Option<usize>> //////// Record::sender - Sender<Result<Option<usize>>>
     pub fn record(
         &self,
         bank_slot: Slot,
         mixin: Hash,
         transactions: Vec<VersionedTransaction>,
     ) -> Result<Option<usize>> {
+       //Result<Option<usize>, PohRecorderError>
         // create a new channel so that there is only 1 sender and when it goes out of scope, the receiver fails
         let (result_sender, result_receiver) = bounded(1);
         let res =
             self.record_sender
                 .send(Record::new(mixin, transactions, bank_slot, result_sender));
+            // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! the line above sends the Record to record_receiver 
         if res.is_err() {
             // If the channel is dropped, then the validator is shutting down so return that we are hitting
             //  the max tick height to stop transaction processing and flush any transactions in the pipeline.
@@ -221,9 +252,12 @@ impl TransactionRecorder {
         // Besides validator exit, this timeout should primarily be seen to affect test execution environments where the various pieces can be shutdown abruptly
         let mut is_exited = false;
         loop {
+        // We need a loop here because we don't lnow when we will get acknowledgement, it may take more than just 1000ms, so for this purpose we keeping checking for response
             let res = result_receiver.recv_timeout(Duration::from_millis(1000));
+            // The line above ensures that result_send sent the Record and the record came -> "waits on approvement"
             match res {
                 Err(RecvTimeoutError::Timeout) => {
+                    // checks if it is excited -> return an error   
                     if is_exited {
                         return Err(PohRecorderError::MaxHeightReached);
                     } else {
@@ -236,18 +270,22 @@ impl TransactionRecorder {
                     return Err(PohRecorderError::MaxHeightReached);
                 }
                 Ok(result) => {
-                    return result;
+                    // result: Result<Option<usize>, PohRecorderError>
+                    return result; 
                 }
             }
         }
     }
 }
 
+// PohRecorderBank is an enum that holds either the WorkingBank or the LastResetBank
+// Bank that is currently leader 
 pub enum PohRecorderBank {
     WorkingBank(BankStart),
     LastResetBank(Arc<Bank>),
 }
 
+// implemenation of PohRecorderBank and just a function that returns the right bank
 impl PohRecorderBank {
     pub fn bank(&self) -> &Bank {
         match self {
@@ -256,14 +294,17 @@ impl PohRecorderBank {
         }
     }
 
+    // getter that gets returns either None or the WorkingBank (BankStart struct)   
     pub fn working_bank_start(&self) -> Option<&BankStart> {
         match self {
             PohRecorderBank::WorkingBank(bank_start) => Some(bank_start),
+            // last recent bank skipped, because it isn't "recent" and it isn't working at the moment  
             PohRecorderBank::LastResetBank(_last_reset_bank) => None,
         }
     }
 }
 
+// Everything is understandable :)
 pub struct WorkingBank {
     pub bank: BankWithScheduler,
     pub start: Arc<Instant>,
@@ -272,6 +313,7 @@ pub struct WorkingBank {
     pub transaction_index: Option<usize>,
 }
 
+// an enum PohLeaderStatus that describes current leader status
 #[derive(Debug, PartialEq, Eq)]
 pub enum PohLeaderStatus {
     NotReached,
@@ -279,23 +321,38 @@ pub enum PohLeaderStatus {
 }
 
 pub struct PohRecorder {
+    // poh is kind of a prepared object for proof of history 
     pub poh: Arc<Mutex<Poh>>,
+    // current number of tick for the current proof of history record 
     tick_height: u64,
+    // if bank was cleared -> true will be sent / in new_with_signal will be set to the some value
     clear_bank_signal: Option<Sender<bool>>,
-    start_bank: Arc<Bank>, // parent slot
+    // parent slot
+    start_bank: Arc<Bank>, 
+    // the length of the slot
     start_bank_active_descendants: Vec<Slot>,
     start_tick_height: u64, // first tick_height this recorder will observe
     tick_cache: Vec<(Entry, u64)>, // cache of entry and its tick_height
+    // bank taht is current working 
     working_bank: Option<WorkingBank>,
+    // entry which should be recorded in PoH
     sender: Sender<WorkingBankEntry>,
+    // when sender sends a record / entry
     poh_timing_point_sender: Option<PohTimingSender>,
+    // just leader_first_tick_height_including_grace_ticks :)
     leader_first_tick_height_including_grace_ticks: Option<u64>,
     leader_last_tick_height: u64, // zero if none
+    // amount of tciks that were added to ensure transition btw leader and non-leader
     grace_ticks: u64,
+    // sth for sancronising PoH with ledger...
     blockstore: Arc<Blockstore>,
+    // contains information about cached leaders schedulers and also about the current
     leader_schedule_cache: Arc<LeaderScheduleCache>,
+    // it is not constant! it will be explained in the defentions document
     ticks_per_slot: u64,
+    // nanoseconds per tick
     target_ns_per_tick: u64,
+    // the next couple of lines are for the time measuring
     record_lock_contention_us: u64,
     flush_cache_no_tick_us: u64,
     flush_cache_tick_us: u64,
@@ -304,37 +361,51 @@ pub struct PohRecorder {
     total_sleep_us: u64,
     record_us: u64,
     report_metrics_us: u64,
+
+
+    // ticks that are elapsed after the PoH record
     ticks_from_record: u64,
+    // time of creating the PohRecorder
     last_metric: Instant,
+    // a (crossbeam)-channel of a thread to send records
     record_sender: Sender<Record>,
+    //
     leader_bank_notifier: Arc<LeaderBankNotifier>,
+    //
     delay_leader_block_for_pending_fork: bool,
+    //
     last_reported_slot_for_pending_fork: Arc<Mutex<Slot>>,
+    // if is finished
     pub is_exited: Arc<AtomicBool>,
 }
 
 impl PohRecorder {
     fn clear_bank(&mut self) {
+        // checks if the working bank isn't None
         if let Some(WorkingBank { bank, start, .. }) = self.working_bank.take() {
+            // sets the slot for which the bank is responsible as completed and notifies all other threads / nodes
             self.leader_bank_notifier.set_completed(bank.slot());
+            // this function returns a tupple of next leader slot and the last slot in the sceduler
             let next_leader_slot = self.leader_schedule_cache.next_leader_slot(
                 bank.collector_id(),
                 bank.slot(),
                 &bank,
                 Some(&self.blockstore),
-                GRACE_TICKS_FACTOR * MAX_GRACE_SLOTS,
+                GRACE_TICKS_FACTOR * MAX_GRACE_SLOTS, // 2 * 2 = 4 , max_slot_range is 4, because the leader is selected for the next four slots/blocks
             );
-            assert_eq!(self.ticks_per_slot, bank.ticks_per_slot());
+            assert_eq!(self.ticks_per_slot, bank.ticks_per_slot()); // 64 == 64 by the default 
             let (
-                leader_first_tick_height_including_grace_ticks,
-                leader_last_tick_height,
-                grace_ticks,
+                leader_first_tick_height_including_grace_ticks, // ticks for the 4 slots + grace ticks(2 * 64) ~ 4 * 64 + 128 
+                leader_last_tick_height,// last tick for which the leader is responsible
+                grace_ticks, // 128 ticks min
             ) = Self::compute_leader_slot_tick_heights(next_leader_slot, self.ticks_per_slot);
+            // setting values
             self.grace_ticks = grace_ticks;
             self.leader_first_tick_height_including_grace_ticks =
                 leader_first_tick_height_including_grace_ticks;
             self.leader_last_tick_height = leader_last_tick_height;
 
+            // it is a macro that logs an information, in the following case the time it took from the start to clear the bank
             datapoint_info!(
                 "leader-slot-start-to-cleared-elapsed-ms",
                 ("slot", bank.slot(), i64),
@@ -343,11 +414,15 @@ impl PohRecorder {
         }
 
         if let Some(ref signal) = self.clear_bank_signal {
+            // tries to send a signal via the channel Sender<bool>
             match signal.try_send(true) {
+                // if it succeeds than it is ok
                 Ok(_) => {}
+                // just an error that occurs when the channel is full
                 Err(TrySendError::Full(_)) => {
                     trace!("replay wake up signal channel is full.")
                 }
+                // an error that occurs when the channel is disconnected
                 Err(TrySendError::Disconnected(_)) => {
                     trace!("replay wake up signal channel is disconnected.")
                 }
@@ -606,11 +681,14 @@ impl PohRecorder {
             .map(|(first_slot, last_slot)| {
                 let leader_first_tick_height = first_slot * ticks_per_slot + 1;
                 let last_tick_height = (last_slot + 1) * ticks_per_slot;
-                let num_slots = last_slot - first_slot + 1;
+                let num_slots = last_slot - first_slot + 1; // should be 4 actually 
                 let grace_ticks = cmp::min(
-                    ticks_per_slot * MAX_GRACE_SLOTS,
-                    ticks_per_slot * num_slots / GRACE_TICKS_FACTOR,
+                    ticks_per_slot * MAX_GRACE_SLOTS, // 64 * 2 = 128
+                    ticks_per_slot * num_slots / GRACE_TICKS_FACTOR, // 64 * 4 / 2 = 128
                 );
+
+                // we can get maximum of 800 ticks per leader (ticks_per_slot * GRACE_TICKS_FACTOR ; 400 * 2 = 800)
+
                 let leader_first_tick_height_including_grace_ticks =
                     leader_first_tick_height + grace_ticks;
                 (
