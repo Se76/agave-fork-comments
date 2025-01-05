@@ -452,6 +452,7 @@ impl PohRecorder {
         tick_height.saturating_sub(1) / self.ticks_per_slot
     }
 
+    // Return the leader after n slots
     pub fn leader_after_n_slots(&self, slots: u64) -> Option<Pubkey> {
         let current_slot = self.slot_for_tick_height(self.tick_height);
         self.leader_schedule_cache
@@ -471,14 +472,17 @@ impl PohRecorder {
             .map(|leader| (leader, target_slot))
     }
 
+    // getter of the next leader
     pub fn next_slot_leader(&self) -> Option<Pubkey> {
         self.leader_after_n_slots(1)
     }
 
+    // getter of the bank
     pub fn bank(&self) -> Option<Arc<Bank>> {
         self.working_bank.as_ref().map(|w| w.bank.clone())
     }
 
+    // getter of the bank start
     pub fn bank_start(&self) -> Option<BankStart> {
         self.working_bank.as_ref().map(|w| BankStart {
             working_bank: w.bank.clone(),
@@ -486,6 +490,7 @@ impl PohRecorder {
         })
     }
 
+    // getter of the bank end -> returnes the slot
     pub fn working_bank_end_slot(&self) -> Option<Slot> {
         self.working_bank.as_ref().and_then(|w| {
             if w.max_tick_height == self.tick_height {
@@ -496,30 +501,37 @@ impl PohRecorder {
         })
     }
 
+    // getter of the current/working slot
     pub fn working_slot(&self) -> Option<Slot> {
         self.working_bank.as_ref().map(|w| w.bank.slot())
     }
 
+    // getter of the current/working bank -> if there is a bank
     pub fn has_bank(&self) -> bool {
         self.working_bank.is_some()
     }
 
+    // getter of the current tick height
     pub fn tick_height(&self) -> u64 {
         self.tick_height
     }
 
+    // getter of the ticks per slot for current bank -> actually it has to be always 64
     pub fn ticks_per_slot(&self) -> u64 {
         self.ticks_per_slot
     }
 
+    // creates a new transaction recorder / clones the old one
     pub fn new_recorder(&self) -> TransactionRecorder {
         TransactionRecorder::new(self.record_sender.clone(), self.is_exited.clone())
     }
 
+    // clones the leader bank notifier of the poh recorder
     pub fn new_leader_bank_notifier(&self) -> Arc<LeaderBankNotifier> {
         self.leader_bank_notifier.clone()
     }
 
+    
     fn is_same_fork_as_previous_leader(&self, slot: Slot) -> bool {
         (slot.saturating_sub(NUM_CONSECUTIVE_LEADER_SLOTS)..slot).any(|slot| {
             // Check if the last slot Poh reset to was any of the
