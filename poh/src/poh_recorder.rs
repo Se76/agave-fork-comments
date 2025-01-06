@@ -1013,7 +1013,7 @@ impl PohRecorder {
             self.flush_cache_tick_us += flush_cache_and_tick_us; // adds time used to cache to cached time it was before
 
             let (_, sleep_us) = measure_us!({
-                let target_time = target_time.unwrap();
+                let target_time = target_time.unwrap(); // IT ENSURES THAT THE EXACT TIME FOR THE TICK HAS ELAPSED
                 // sleep is not accurate enough to get a predictable time.
                 // Kernel can not schedule the thread for a while.
                 while Instant::now() < target_time {
@@ -1025,6 +1025,7 @@ impl PohRecorder {
         }
     }
 
+    // creates a log and then sets all metrics to 0, so resets them
     fn report_metrics(&mut self, bank_slot: Slot) {
         if self.last_metric.elapsed().as_millis() > 1000 {
             datapoint_info!(
