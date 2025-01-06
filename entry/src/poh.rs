@@ -89,20 +89,20 @@ impl Poh {
     }
 
     pub fn tick(&mut self) -> Option<PohEntry> {
-        self.hash = hash(self.hash.as_ref());
-        self.num_hashes += 1;
-        self.remaining_hashes -= 1;
+        self.hash = hash(self.hash.as_ref()); // hashes the hash of PoH object
+        self.num_hashes += 1; // adds one because of the line above
+        self.remaining_hashes -= 1; 
 
         // If we are in low power mode then always generate a tick.
         // Otherwise only tick if there are no remaining hashes
-        if self.hashes_per_tick != LOW_POWER_MODE && self.remaining_hashes != 0 {
+        if self.hashes_per_tick != LOW_POWER_MODE && self.remaining_hashes != 0 { // LOW_POWER_MODE represents the biggest possible u64
             return None;
         }
 
         let num_hashes = self.num_hashes;
-        self.remaining_hashes = self.hashes_per_tick;
-        self.num_hashes = 0;
-        self.tick_number += 1;
+        self.remaining_hashes = self.hashes_per_tick; // Reset remaining_hashes
+        self.num_hashes = 0;                          // Reset num_hashes
+        self.tick_number += 1;                        // Increment tick number
         Some(PohEntry {
             num_hashes,
             hash: self.hash,
