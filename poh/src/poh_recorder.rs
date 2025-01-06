@@ -317,6 +317,7 @@ pub struct WorkingBank {
 #[derive(Debug, PartialEq, Eq)]
 pub enum PohLeaderStatus {
     NotReached,
+    // parent slot is a slot that was before this slot 
     Reached { poh_slot: Slot, parent_slot: Slot },
 }
 
@@ -638,6 +639,7 @@ impl PohRecorder {
         );
     }
 
+    // getter of the slot that is wriiten in StartBank
     pub fn start_slot(&self) -> Slot {
         self.start_bank.slot()
     }
@@ -695,17 +697,17 @@ impl PohRecorder {
     ) -> (Option<u64>, u64, u64) {
         next_leader_slot
             .map(|(first_slot, last_slot)| {
-                let leader_first_tick_height = first_slot * ticks_per_slot + 1;
-                let last_tick_height = (last_slot + 1) * ticks_per_slot;
+                let leader_first_tick_height = first_slot * ticks_per_slot + 1; // jsut the first tick during the leader slot
+                let last_tick_height = (last_slot + 1) * ticks_per_slot; // (xxxxxxxx +1) * 64
                 let num_slots = last_slot - first_slot + 1; // should be 4 actually 
                 let grace_ticks = cmp::min(
                     ticks_per_slot * MAX_GRACE_SLOTS, // 64 * 2 = 128
                     ticks_per_slot * num_slots / GRACE_TICKS_FACTOR, // 64 * 4 / 2 = 128
                 );
 
-                // we can get maximum of 800 ticks per leader (ticks_per_slot * GRACE_TICKS_FACTOR ; 400 * 2 = 800)
+                // we can get min of 128 grace ticks per leader (ticks_per_slot * GRACE_TICKS_FACTOR ; 64 * 2 = 128)
 
-                let leader_first_tick_height_including_grace_ticks =
+                let leader_first_tick_height_including_grace_ticks = // xxxxxxxxx + 128
                     leader_first_tick_height + grace_ticks;
                 (
                     Some(leader_first_tick_height_including_grace_ticks),
@@ -717,8 +719,8 @@ impl PohRecorder {
                 None,
                 0,
                 cmp::min(
-                    ticks_per_slot * MAX_GRACE_SLOTS,
-                    ticks_per_slot * NUM_CONSECUTIVE_LEADER_SLOTS / GRACE_TICKS_FACTOR,
+                    ticks_per_slot * MAX_GRACE_SLOTS, // 64 * 2 = 128
+                    ticks_per_slot * NUM_CONSECUTIVE_LEADER_SLOTS / GRACE_TICKS_FACTOR, // 64 * 4 / 2 = 128
                 ),
             ))
     }
