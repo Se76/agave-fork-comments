@@ -758,7 +758,7 @@ impl PohRecorder {
         self.start_bank_active_descendants = active_descendants.to_vec();
     }
 
-    // synchronize PoH with a bank
+    // synchronize PoH with a bank and resets the PoH object from PoH.rs -> sets ticks_per_slot to 0 and waits on a new slot
     pub fn reset(&mut self, reset_bank: Arc<Bank>, next_leader_slot: Option<(Slot, Slot)>) {
         self.clear_bank();
         self.reset_poh(reset_bank, true);
@@ -974,16 +974,17 @@ impl PohRecorder {
     //
     pub fn tick(&mut self) {
         let ((poh_entry, target_time), tick_lock_contention_us) = measure_us!({
-            let mut poh_l = self.poh.lock().unwrap();
-            let poh_entry = poh_l.tick();
-            let target_time = if poh_entry.is_some() {
-                Some(poh_l.target_poh_time(self.target_ns_per_tick))
+            // num_hashes and hash         this moment                    time
+            let mut poh_l = self.poh.lock().unwrap(); //  blocks the PoH thread to safely generate a new tick.
+            let poh_entry = poh_l.tick(); // makes hashes until remaining hashes are 0 and then makes a tick (last remaining hash) and also sets remaining hashes to default hashes_per_tick 
+            let target_time = if poh_entry.is_some() { // if poh_entry isn't None, so if the tick "was made"
+                Some(poh_l.target_poh_time(self.target_ns_per_tick)) // calculates the target time for the next tick
             } else {
-                None
+                None  // if poh_entry is None, so if the tick "was not made", then target_time is None
             };
             (poh_entry, target_time)
         });
-        self.tick_lock_contention_us += tick_lock_contention_us;
+        self.tick_lock_contention_us += tick_lock_contention_us; // time spent waiting for the PoH thread lock.
 
         if let Some(poh_entry) = poh_entry {
             self.tick_height += 1;
