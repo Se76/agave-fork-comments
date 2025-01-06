@@ -531,7 +531,7 @@ impl PohRecorder {
         self.leader_bank_notifier.clone()
     }
 
-    
+
     fn is_same_fork_as_previous_leader(&self, slot: Slot) -> bool {
         (slot.saturating_sub(NUM_CONSECUTIVE_LEADER_SLOTS)..slot).any(|slot| {
             // Check if the last slot Poh reset to was any of the
@@ -542,6 +542,7 @@ impl PohRecorder {
         })
     }
 
+    // compares pubkey of the owner of the bank of the starting slot (so every leader period is a range of 4 slots)
     fn start_slot_was_mine(&self, my_pubkey: &Pubkey) -> bool {
         self.start_bank.collector_id() == my_pubkey
     }
@@ -554,6 +555,7 @@ impl PohRecorder {
             .any(|pending_slot| *pending_slot < next_slot)
     }
 
+    // decides whether current leader can build a block/slot right away after previous block/slot without waitng for grace ticks
     fn can_skip_grace_ticks(&self, my_pubkey: &Pubkey) -> bool {
         let next_tick_height = self.tick_height.saturating_add(1);
         let next_slot = self.slot_for_tick_height(next_tick_height);
@@ -585,6 +587,7 @@ impl PohRecorder {
         false
     }
 
+    // checks if my_pubkey reached leader_first_tick_height_including_grace_ticks (is a leader now)
     fn reached_leader_tick(
         &self,
         my_pubkey: &Pubkey,
@@ -597,7 +600,7 @@ impl PohRecorder {
             return true;
         }
 
-        let target_tick_height = leader_first_tick_height_including_grace_ticks.saturating_sub(1);
+        let target_tick_height = leader_first_tick_height_including_grace_ticks.saturating_sub(1); // if leader_first_tick_height_including_grace_ticks is 0, then target_tick_height is also 0
         if self.tick_height >= target_tick_height {
             // We have finished waiting for grace ticks.
             return true;
