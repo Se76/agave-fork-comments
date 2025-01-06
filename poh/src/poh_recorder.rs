@@ -831,6 +831,8 @@ impl PohRecorder {
         let _ = self.flush_cache(false);
     }
 
+
+    // features for the tests
     #[cfg(feature = "dev-context-only-utils")]
     pub fn set_bank_for_test(&mut self, bank: Arc<Bank>) {
         self.set_bank(BankWithScheduler::new_without_scheduler(bank), false)
@@ -971,7 +973,7 @@ impl PohRecorder {
         }
     }
 
-    //
+    // makes a tick (empty entry) and measures whole time that was needed
     pub fn tick(&mut self) {
         let ((poh_entry, target_time), tick_lock_contention_us) = measure_us!({
             // num_hashes and hash         this moment                    time
@@ -987,28 +989,28 @@ impl PohRecorder {
         self.tick_lock_contention_us += tick_lock_contention_us; // time spent waiting for the PoH thread lock.
 
         if let Some(poh_entry) = poh_entry {
-            self.tick_height += 1;
-            trace!("tick_height {}", self.tick_height);
-            self.report_poh_timing_point();
+            self.tick_height += 1; // if PoH entry succeded (1 tick) than just increment the tick_height by 1
+            trace!("tick_height {}", self.tick_height); // logs
+            self.report_poh_timing_point(); // logs and sends timimng point of a tick
 
             if self
                 .leader_first_tick_height_including_grace_ticks
-                .is_none()
+                .is_none() // if the validator is not in the leader grace period of ticks than just wait until it
             {
                 return;
             }
 
-            self.tick_cache.push((
+            self.tick_cache.push(( // pushes current/already previous PoH entry to the cache
                 Entry {
                     num_hashes: poh_entry.num_hashes,
                     hash: poh_entry.hash,
-                    transactions: vec![],
+                    transactions: vec![], // there are no transactions because it is the tick entry and it is empty!!!
                 },
                 self.tick_height,
             ));
 
-            let (_flush_res, flush_cache_and_tick_us) = measure_us!(self.flush_cache(true));
-            self.flush_cache_tick_us += flush_cache_and_tick_us;
+            let (_flush_res, flush_cache_and_tick_us) = measure_us!(self.flush_cache(true)); // measures the time it takes to flush the cache
+            self.flush_cache_tick_us += flush_cache_and_tick_us; // adds time used to cache to cached time it was before
 
             let (_, sleep_us) = measure_us!({
                 let target_time = target_time.unwrap();
