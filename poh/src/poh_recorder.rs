@@ -927,7 +927,7 @@ impl PohRecorder {
                     );
                 }
             }
-            // beginning of a slot / of the next slot 
+            // beginning of a slot
             1 => {
                 if let Some(ref sender) = self.poh_timing_point_sender {
                     send_poh_timing_point(
@@ -945,6 +945,7 @@ impl PohRecorder {
         }
     }
 
+    // creates a new poh timing point in any wanted time
     fn report_poh_timing_point_by_working_bank(&self, slot: Slot) {
         if let Some(ref sender) = self.poh_timing_point_sender {
             send_poh_timing_point(
@@ -958,6 +959,7 @@ impl PohRecorder {
         }
     }
 
+    // decides whether timing_point should be sent by tick or by working bank
     fn report_poh_timing_point(&self) {
         // send poh slot end timing point
         if let Some(slot) = self.working_bank_end_slot() {
@@ -969,6 +971,7 @@ impl PohRecorder {
         }
     }
 
+    //
     pub fn tick(&mut self) {
         let ((poh_entry, target_time), tick_lock_contention_us) = measure_us!({
             let mut poh_l = self.poh.lock().unwrap();
