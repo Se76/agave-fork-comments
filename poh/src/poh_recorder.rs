@@ -728,10 +728,11 @@ impl PohRecorder {
     fn reset_poh(&mut self, reset_bank: Arc<Bank>, reset_start_bank: bool) {
         let blockhash = reset_bank.last_blockhash();
         let poh_hash = {
-            let mut poh = self.poh.lock().unwrap();
-            poh.reset(blockhash, *reset_bank.hashes_per_tick());
-            poh.hash
+            let mut poh = self.poh.lock().unwrap(); // blocks the Arc<>
+            poh.reset(blockhash, *reset_bank.hashes_per_tick()); // hashes per tick will be sent -> but ticks_per_slot in poh will be 0 because the leader have to initialize a new poh then
+            poh.hash 
         };
+        // logs
         info!(
             "reset poh from: {},{},{} to: {},{}",
             poh_hash,
@@ -741,12 +742,13 @@ impl PohRecorder {
             reset_bank.slot()
         );
 
+
         self.tick_cache = vec![];
         if reset_start_bank {
             self.start_bank = reset_bank;
             self.start_bank_active_descendants = vec![];
         }
-        self.tick_height = (self.start_slot() + 1) * self.ticks_per_slot;
+        self.tick_height = (self.start_slot() + 1) * self.ticks_per_slot; // this isn't 0 because 0 ticks of poh and not of poh recorder
         self.start_tick_height = self.tick_height + 1;
     }
 
@@ -781,6 +783,7 @@ impl PohRecorder {
         self.leader_last_tick_height = leader_last_tick_height;
     }
 
+    // set a new bank with scheduler
     pub fn set_bank(&mut self, bank: BankWithScheduler, track_transaction_indexes: bool) {
         assert!(self.working_bank.is_none());
         self.leader_bank_notifier.set_in_progress(&bank);
@@ -791,6 +794,7 @@ impl PohRecorder {
             start: Arc::new(Instant::now()),
             transaction_index: track_transaction_indexes.then_some(0),
         };
+        // logs a message on a level of trace 
         trace!("new working bank");
         assert_eq!(working_bank.bank.ticks_per_slot(), self.ticks_per_slot());
         if let Some(hashes_per_tick) = *working_bank.bank.hashes_per_tick() {
@@ -907,6 +911,7 @@ impl PohRecorder {
         Ok(())
     }
 
+    // reports either first tick of the slot / or last tick in the slot when they are reached
     fn report_poh_timing_point_by_tick(&self) {
         match self.tick_height % self.ticks_per_slot {
             // reaching the end of the slot
@@ -922,7 +927,7 @@ impl PohRecorder {
                     );
                 }
             }
-            // beginning of a slot
+            // beginning of a slot / of the next slot 
             1 => {
                 if let Some(ref sender) = self.poh_timing_point_sender {
                     send_poh_timing_point(
@@ -935,6 +940,7 @@ impl PohRecorder {
                     );
                 }
             }
+            // any other cases in which self.tick_height % self.ticks_per_slot are bigger than 0 or 1 just wait for the slot end
             _ => {}
         }
     }
