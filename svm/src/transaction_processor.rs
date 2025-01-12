@@ -333,29 +333,32 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
                                                                                        //<CB: TransactionProcessingCallback> 
                                                                                        // -> makes generic type CB over TransactionProcessingCallback
         &self, // reference to self (TransactionBatchProcessor)
-        callbacks: &CB, // callbacks, type reference to CB, so bassicly this parameter should be an implementation of TransactionProcessingCallback
+        callbacks: &CB, // callbacks, type reference to CB, so bassicly this parameter should be an implementation of TransactionProcessingCallback !!!is very important to load accounts, bassicly each account should have owner, its data (amount of lamports, address, executable or not, etc) to be loaded -> for trnsactions to be proccessed 
         sanitized_txs: &[impl SVMTransaction], // reference to an array of variables that implement the SVMTransaction trait, transactions that will be processed
         check_results: Vec<TransactionCheckResult>, // vector of TransactionCheckResult, results of transaction checks
         environment: &TransactionProcessingEnvironment, // runtime environment for transaction batch processing
         config: &TransactionProcessingConfig, // config 
-    ) -> LoadAndExecuteSanitizedTransactionsOutput {
+    ) -> LoadAndExecuteSanitizedTransactionsOutput {  // returns LoadAndExecuteSanitizedTransactionsOutput struct (error_metrics, execute_timings, processing_results)
         // If `check_results` does not have the same length as `sanitized_txs`,
         // transactions could be truncated as a result of `.iter().zip()` in
         // many of the below methods.
         // See <https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.zip>.
-        debug_assert_eq!(
-            sanitized_txs.len(),
-            check_results.len(),
-            "Length of check_results does not match length of sanitized_txs"
+        debug_assert_eq!(    
+            sanitized_txs.len(),      // macro than ensures that check_results.len() == sanitized_txs.len(), if they are not equal it will panic and print a message
+            check_results.len(),      // already well described above
+            "Length of check_results does not match length of sanitized_txs" // message that will be printed in case if check_results.len() == sanitized_txs.len() is not true
         );
 
         // Initialize metrics.
-        let mut error_metrics = TransactionErrorMetrics::default();
-        let mut execute_timings = ExecuteTimings::default();
-        let mut processing_results = Vec::with_capacity(sanitized_txs.len());
+        let mut error_metrics = TransactionErrorMetrics::default(); // initializes default of this struct
+        let mut execute_timings = ExecuteTimings::default();    // initializes default of this struct
+        let mut processing_results = Vec::with_capacity(sanitized_txs.len()); // creates a vector with length (ccapacity) of sanitized_txs.len()
 
-        let native_loader = native_loader::id();
-        let (program_accounts_map, filter_executable_us) = measure_us!({
+        let native_loader = native_loader::id(); // just an pubkey for native loader
+        let (program_accounts_map, filter_executable_us) = measure_us!({ // custom macro measure_us measures execution time a
+                                                                                                             // and returns that what will be returned inside of macro 
+                                                                                                             // and measured time in ms, in our case filter_executable_us - time in ms
+                                                                                                             // and program_accounts_map - hash map, for executable accounts
             let mut program_accounts_map = Self::filter_executable_program_accounts(
                 callbacks,
                 sanitized_txs,
