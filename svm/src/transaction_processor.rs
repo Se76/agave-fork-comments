@@ -418,64 +418,75 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
         );
 
         let enable_transaction_loading_failure_fees = environment
-            .feature_set
-            .is_active(&enable_transaction_loading_failure_fees::id());
+            .feature_set                                // feature set, so whether there are some features turned on or not
+            .is_active(&enable_transaction_loading_failure_fees::id()); // if these features are active than enable_transaction_loading_failure_fees will be true
 
-        let (mut validate_fees_us, mut load_us, mut execution_us): (u64, u64, u64) = (0, 0, 0);
+        let (mut validate_fees_us, mut load_us, mut execution_us): (u64, u64, u64) = (0, 0, 0); // initializes default timings for validation, loading and execution
 
         // Validate, execute, and collect results from each transaction in order.
         // With SIMD83, transactions must be executed in order, because transactions
         // in the same batch may modify the same accounts. Transaction order is
         // preserved within entries written to the ledger.
-        for (tx, check_result) in sanitized_txs.iter().zip(check_results) {
-            let (validate_result, single_validate_fees_us) =
-                measure_us!(check_result.and_then(|tx_details| {
-                    Self::validate_transaction_nonce_and_fee_payer(
-                        &mut account_loader,
+        for (tx, check_result) in sanitized_txs.iter().zip(check_results) { // just a for loop that iterates over sanitized_txs (every single tx) 
+                                                                                                                        // and check_results (corresponding to the tx result of checks)
+            let (validate_result, single_validate_fees_us) = // measure_us -> validate_result and single_validate_fees_us
+                measure_us!(check_result.and_then(|tx_details| {     // if err -> return err, if ok -> continue with closure
+                    Self::validate_transaction_nonce_and_fee_payer( // ensures that transaction is nor repeating and that fee payer is provided and has enough funds
+                        &mut account_loader, // mutable reference
                         tx,
                         tx_details,
                         &environment.blockhash,
                         environment.fee_lamports_per_signature,
                         environment
                             .rent_collector
-                            .unwrap_or(&RentCollector::default()),
-                        &mut error_metrics,
+                            .unwrap_or(&RentCollector::default()), // if rent_collector is not provided then use default
+                        &mut error_metrics, // mutable reference
                     )
                 }));
-            validate_fees_us = validate_fees_us.saturating_add(single_validate_fees_us);
+            validate_fees_us = validate_fees_us.saturating_add(single_validate_fees_us); // it will add time that it took for one transaction to validate fees to the sum of time 
+                                                                                         // that it took for all transactions (0 by default)
 
-            let (load_result, single_load_us) = measure_us!(load_transaction(
-                &mut account_loader,
+
+            // load_transaction actually uses another function (bassicly is just a wrapper) called load_transaction_accounts which 
+            // loads all accounts that are needed for execution of transactions, makes some additional checks and returns Result<LoadedTransactionAccounts> 
+            // and the wrapper function load_transaction handles errors and returns an enum TransactionLoadResult
+            let (load_result, single_load_us) = measure_us!(load_transaction(  // measure_us -> load_result and single_load_us
+                &mut account_loader,  // mutable reference
                 tx,
                 validate_result,
-                &mut error_metrics,
+                &mut error_metrics,  // mutable reference
                 environment
                     .rent_collector
-                    .unwrap_or(&RentCollector::default()),
+                    .unwrap_or(&RentCollector::default()), // if rent_collector is not provided then use default
             ));
-            load_us = load_us.saturating_add(single_load_us);
+            load_us = load_us.saturating_add(single_load_us);  // calculates time that was used for loading, simillar to validate_fees_us
 
-            let (processing_result, single_execution_us) = measure_us!(match load_result {
-                TransactionLoadResult::NotLoaded(err) => Err(err),
-                TransactionLoadResult::FeesOnly(fees_only_tx) => {
-                    if enable_transaction_loading_failure_fees {
+            // exactly the execution of the transaction / processing 
+            let (processing_result, single_execution_us) = measure_us!(match load_result { // measure_us -> processing_result and single_execution_us
+                // it matches on the enum TransactionLoadResult
+                TransactionLoadResult::NotLoaded(err) => Err(err), // if there was an error than return same error
+                // FeesOnly is kind of tricky, as fas as I understood it is the case if the transaction fails during loading
+                // and it is already too far and the fees should be charged though it failed
+                TransactionLoadResult::FeesOnly(fees_only_tx) => {  
+                    if enable_transaction_loading_failure_fees {  // if the feature is enabled than it will be true
                         // Update loaded accounts cache with nonce and fee-payer
                         account_loader
                             .update_accounts_for_failed_tx(tx, &fees_only_tx.rollback_accounts);
 
                         Ok(ProcessedTransaction::FeesOnly(Box::new(fees_only_tx)))
                     } else {
-                        Err(fees_only_tx.load_error)
+                        Err(fees_only_tx.load_error) // if the feature is not enabled than return an error
                     }
                 }
-                TransactionLoadResult::Loaded(loaded_transaction) => {
+                TransactionLoadResult::Loaded(loaded_transaction) => {  // if programs, accounts and transaction were loaded successfully
+                    // the transaction will be executed, all the instrcutions will be executed and all the balances will be changed
                     let executed_tx = self.execute_loaded_transaction(
                         callbacks,
                         tx,
                         loaded_transaction,
-                        &mut execute_timings,
-                        &mut error_metrics,
-                        &mut account_loader.program_cache,
+                        &mut execute_timings, // mutable reference
+                        &mut error_metrics, // mutable reference
+                        &mut account_loader.program_cache, // mutable reference
                         environment,
                         config,
                     );
@@ -488,9 +499,9 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
                     Ok(ProcessedTransaction::Executed(Box::new(executed_tx)))
                 }
             });
-            execution_us = execution_us.saturating_add(single_execution_us);
+            execution_us = execution_us.saturating_add(single_execution_us); // measure time that was used for execution
 
-            processing_results.push(processing_result);
+            processing_results.push(processing_result); // push the result to the vector of results
         }
 
         // Skip eviction when there's no chance this particular tx batch has increased the size of
@@ -510,6 +521,7 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
                 );
         }
 
+        // logs
         debug!(
             "load: {}us execute: {}us txs_len={}",
             load_us,
@@ -517,6 +529,8 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
             sanitized_txs.len(),
         );
 
+
+        // writing all timings
         execute_timings
             .saturating_add_in_place(ExecuteTimingType::ValidateFeesUs, validate_fees_us);
         execute_timings
@@ -526,6 +540,7 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
         execute_timings.saturating_add_in_place(ExecuteTimingType::LoadUs, load_us);
         execute_timings.saturating_add_in_place(ExecuteTimingType::ExecuteUs, execution_us);
 
+        // returning the results
         LoadAndExecuteSanitizedTransactionsOutput {
             error_metrics,
             execute_timings,
