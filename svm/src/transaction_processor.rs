@@ -329,13 +329,15 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
     }
 
     /// Main entrypoint to the SVM.
-    pub fn load_and_execute_sanitized_transactions<CB: TransactionProcessingCallback>(
-        &self,
-        callbacks: &CB,
-        sanitized_txs: &[impl SVMTransaction],
-        check_results: Vec<TransactionCheckResult>,
-        environment: &TransactionProcessingEnvironment,
-        config: &TransactionProcessingConfig,
+    pub fn load_and_execute_sanitized_transactions<CB: TransactionProcessingCallback>( // literally main method, 
+                                                                                       //<CB: TransactionProcessingCallback> 
+                                                                                       // -> makes generic type CB over TransactionProcessingCallback
+        &self, // reference to self (TransactionBatchProcessor)
+        callbacks: &CB, // callbacks, type reference to CB, so bassicly this parameter should be an implementation of TransactionProcessingCallback
+        sanitized_txs: &[impl SVMTransaction], // reference to an array of variables that implement the SVMTransaction trait, transactions that will be processed
+        check_results: Vec<TransactionCheckResult>, // vector of TransactionCheckResult, results of transaction checks
+        environment: &TransactionProcessingEnvironment, // runtime environment for transaction batch processing
+        config: &TransactionProcessingConfig, // config 
     ) -> LoadAndExecuteSanitizedTransactionsOutput {
         // If `check_results` does not have the same length as `sanitized_txs`,
         // transactions could be truncated as a result of `.iter().zip()` in
