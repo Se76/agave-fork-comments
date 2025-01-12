@@ -355,51 +355,60 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
         let mut processing_results = Vec::with_capacity(sanitized_txs.len()); // creates a vector with length (ccapacity) of sanitized_txs.len()
 
         let native_loader = native_loader::id(); // just an pubkey for native loader
-        let (program_accounts_map, filter_executable_us) = measure_us!({ // custom macro measure_us measures execution time a
-                                                                                                             // and returns that what will be returned inside of macro 
+        let (program_accounts_map, filter_executable_us) = measure_us!({ // custom macro measure_us measures execution time
+                                                                                                             // and returns tuple of that what will be returned inside of macro and ex. time
                                                                                                              // and measured time in ms, in our case filter_executable_us - time in ms
                                                                                                              // and program_accounts_map - hash map, for executable accounts
-            let mut program_accounts_map = Self::filter_executable_program_accounts(
+
+            let mut program_accounts_map = Self::filter_executable_program_accounts(  // filters all executable program accounts and returns hashmap with these accounts
                 callbacks,
                 sanitized_txs,
                 &check_results,
-                PROGRAM_OWNERS,
+                PROGRAM_OWNERS, // program that owns all executable programs
             );
-            for builtin_program in self.builtin_program_ids.read().unwrap().iter() {
+            for builtin_program in self.builtin_program_ids.read().unwrap().iter() { // adds/pushes/inserts already built in programs to the program_accounts_map
                 program_accounts_map.insert(*builtin_program, (&native_loader, 0));
             }
-            program_accounts_map
+            program_accounts_map // returns program_accounts_map with executable accounts and the measured time will be stopped as this will be returned inside of macro
         });
 
-        let (program_cache_for_tx_batch, program_cache_us) = measure_us!({
-            let program_cache_for_tx_batch = self.replenish_program_cache(
+        let (program_cache_for_tx_batch, program_cache_us) = measure_us!({ // custom macro measure_us measures execution time
+                                                                                                        // and returns tuple of that what will be returned inside of macro and ex. time
+            let program_cache_for_tx_batch = self.replenish_program_cache( // checks if some program accounts are missing in the cache
+                                                                           // if yes, it loads them and returnes ProgramCacheForTxBatch, 
+                                                                           // where inside are all programs needed for execution
                 callbacks,
                 &program_accounts_map,
-                &mut execute_timings,
+                &mut execute_timings, // mutable reference
                 config.check_program_modification_slot,
                 config.limit_to_load_programs,
             );
 
-            if program_cache_for_tx_batch.hit_max_limit {
+            if program_cache_for_tx_batch.hit_max_limit {  // if cache is reached max limit of storage then error will be returned
                 return LoadAndExecuteSanitizedTransactionsOutput {
                     error_metrics,
                     execute_timings,
-                    processing_results: (0..sanitized_txs.len())
-                        .map(|_| Err(TransactionError::ProgramCacheHitMaxLimit))
-                        .collect(),
+                    processing_results: (0..sanitized_txs.len()) // makes a range of length of sanitized_txs, iterates each with each index and for each retruns an error in processing_results
+                        .map(|_| Err(TransactionError::ProgramCacheHitMaxLimit)) // just small closure that takes whatever _ (index in this case) and returns TransactionError::ProgramCacheHitMaxLimit
+                        .collect(), // all iterators are "lazy" that is why we should always collect each iterator 
                 };
             }
 
-            program_cache_for_tx_batch
+            program_cache_for_tx_batch // if cache isn't reached max limit of storage then it will be returned
         });
 
         // Determine a capacity for the internal account cache. This
         // over-allocates but avoids ever reallocating, and spares us from
         // deduplicating the account keys lists.
-        let account_keys_in_batch = sanitized_txs.iter().map(|tx| tx.account_keys().len()).sum();
+        let account_keys_in_batch = sanitized_txs.iter().map(|tx| tx.account_keys().len()).sum(); // pretty well described above :)
+                                                                                                                               // rust concept: iterator over sanitized txs will be created
+                                                                                                                               // then each transaction will be mapped and with the help of closure
+                                                                                                                               //will be returned amount of all account keys in particular transaction
+                                                                                                                               // at the end it will be summed and will be returned
 
         // Create the account loader, which wraps all external account fetching.
-        let mut account_loader = AccountLoader::new_with_account_cache_capacity(
+        let mut account_loader = AccountLoader::new_with_account_cache_capacity( // creates account loader with the capacity that we already calculated before
+                                                                                                        // it "loads all accounts that are needed for execution of transactions"
             config.account_overrides,
             program_cache_for_tx_batch,
             program_accounts_map,
