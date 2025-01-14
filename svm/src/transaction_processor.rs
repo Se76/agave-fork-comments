@@ -521,7 +521,7 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
                 );
         }
 
-        // logs
+        // detailed logs on timings and amoUnt of txs
         debug!(
             "load: {}us execute: {}us txs_len={}",
             load_us,

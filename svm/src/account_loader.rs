@@ -220,7 +220,7 @@ impl<'a, CB: TransactionProcessingCallback> AccountLoader<'a, CB> {
     pub fn update_accounts_for_failed_tx(
         &mut self,
         message: &impl SVMMessage,
-        rollback_accounts: &RollbackAccounts,
+        rollback_accounts: &RollbackAccounts, 
     ) {
         let fee_payer_address = message.fee_payer();
         match rollback_accounts {
