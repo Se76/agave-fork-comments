@@ -1438,6 +1438,7 @@ pub fn execute<'a, 'b: 'a>(
         create_vm_time.stop();
 
         vm.context_object_pointer.execute_time = Some(Measure::start("execute"));
+        // here the program is executed
         let (compute_units_consumed, result) = vm.execute_program(executable, !use_jit);
         MEMORY_POOL.with_borrow_mut(|memory_pool| {
             memory_pool.put_stack(stack);

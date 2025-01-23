@@ -46,6 +46,7 @@ pub mod vote_simulator;
 pub mod voting_service;
 pub mod warm_quic_cache_service;
 pub mod window_service;
+pub mod replay_stage_test;
 
 #[macro_use]
 extern crate log;

@@ -462,6 +462,7 @@ impl<'a> InvokeContext<'a> {
     pub fn process_instruction(
         &mut self,
         instruction_data: &[u8],
+        // indexes/ pointers to the accounts
         instruction_accounts: &[InstructionAccount],
         program_indices: &[IndexOfAccount],
         compute_units_consumed: &mut u64,
@@ -513,9 +514,9 @@ impl<'a> InvokeContext<'a> {
         timings: &mut ExecuteTimings,
     ) -> Result<(), InstructionError> {
         let instruction_context = self.transaction_context.get_current_instruction_context()?;
-        let process_executable_chain_time = Measure::start("process_executable_chain_time");
+        let process_executable_chain_time = Measure::start("process_executable_chain_time"); // instant
 
-        let builtin_id = {
+        let builtin_id = {  // Checks if the current instruction is a built-in program or a user-defined program.
             debug_assert!(instruction_context.get_number_of_program_accounts() <= 1);
             let borrowed_root_account = instruction_context
                 .try_borrow_program_account(self.transaction_context, 0)
@@ -539,14 +540,14 @@ impl<'a> InvokeContext<'a> {
                 .get_function_registry(SBPFVersion::V0)
                 .lookup_by_key(ENTRYPOINT_KEY)
                 .map(|(_name, function)| function),
-            _ => None,
+            _ => None,  // if user defined program -> then none
         }
         .ok_or(InstructionError::UnsupportedProgramId)?;
         entry.ix_usage_counter.fetch_add(1, Ordering::Relaxed);
 
         let program_id = *instruction_context.get_last_program_key(self.transaction_context)?;
         self.transaction_context
-            .set_return_data(program_id, Vec::new())?;
+            .set_return_data(program_id, Vec::new())?; // Vec::with_capacity(0) -> faster, no reallocation required
         let logger = self.get_log_collector();
         stable_log::program_invoke(&logger, &program_id, self.get_stack_height());
         let pre_remaining_units = self.get_remaining();
@@ -556,18 +557,24 @@ impl<'a> InvokeContext<'a> {
         let mock_config = Config::default();
         let empty_memory_mapping =
             MemoryMapping::new(Vec::new(), &mock_config, SBPFVersion::V0).unwrap();
-        let mut vm = EbpfVm::new(
+                                                            // mockup ???
+        let mut vm = EbpfVm::new( // initializes a new vm
             self.program_cache_for_tx_batch
                 .environments
                 .program_runtime_v2
                 .clone(),
             SBPFVersion::V0,
             // Removes lifetime tracking
+
+
+
+
+            ///////// UNDERSTAND
             unsafe { std::mem::transmute::<&mut InvokeContext, &mut InvokeContext>(self) },
             empty_memory_mapping,
             0,
         );
-        vm.invoke_function(function);
+        vm.invoke_function(function);     // 574 invokes 
         let result = match vm.program_result {
             ProgramResult::Ok(_) => {
                 stable_log::program_success(&logger, &program_id);
