@@ -10,6 +10,7 @@ license = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
+criterion = "0.5.1"
 ahash = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
@@ -117,3 +118,7 @@ shuttle-test = [
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "transaction_processor_bench"
+harness = false
