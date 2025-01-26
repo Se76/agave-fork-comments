@@ -1,8 +1,15 @@
-use std::sync::RwLock;
+// use std::sync::RwLock;
 
 use solana_program_runtime::loaded_programs::ForkGraph;
-use solana_svm::transaction_processor_test::*;
-use criterion::{criterion_group, criterion_main, Criterion};
+// use solana_svm::transaction_processor_test::*;
+use {
+        criterion::{
+            criterion_group, 
+            criterion_main, 
+            Criterion
+        },
+        solana_svm::transaction_processor_test::*
+    };
 
 // Dummy implementation of ForkGraph for testing purposes
 #[derive(Default)]
@@ -15,54 +22,70 @@ impl ForkGraph for DummyForkGraph {
 }
 
 // #[bench]
-fn my_benchmark(c: &mut Criterion){
-    let fork_graph = RwLock::new(DummyForkGraph::default());
-    let processor = TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+fn my_benchmark<FG: ForkGraph>(c: &mut Criterion){
+    // let fork_graph = RwLock::new(DummyForkGraph::default());
+    // let processor = TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
 
     c.bench_function("transaction_batch_processor", |b| {
         b.iter(|| {
             // Perform benchmarking logic
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            let one = TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-            one.just_wait();
+            let a =new_uninitialized::<DummyForkGraph>(1, 1);
             
             
         })
     });
 }
 
-criterion_group!(benches, my_benchmark);
+criterion_group!(benches, my_benchmark<DummyForkGraph>);
 criterion_main!(benches);
+
+
+
+// fn my_benchmark(c: &mut Criterion){
+//     let fork_graph = RwLock::new(DummyForkGraph::default());
+//     let processor = TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+
+//     c.bench_function("transaction_batch_processor", |b| {
+//         b.iter(|| {
+//             // Perform benchmarking logic
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             let one = TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//             one.just_wait();
+            
+            
+//         })
+//     });
+// }

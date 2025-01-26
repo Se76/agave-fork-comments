@@ -1,65 +1,85 @@
-use std::time::Duration;
-
-#[cfg(feature = "dev-context-only-utils")]
-use qualifier_attr::{field_qualifiers, qualifiers};
-use std::thread::sleep;
+// #[cfg(feature = "dev-context-only-utils")]
+// use qualifier_attr::{field_qualifiers, qualifiers};
+// use std::thread::sleep;
 use {
-    // crate::transaction_processor::TransactionBatchProcessor,
+    crate::transaction_processor::TransactionBatchProcessor,
     solana_clock::{Epoch, Slot}, solana_program_runtime::{loaded_programs::{ForkGraph, ProgramCache}, sysvar_cache::SysvarCache}, solana_pubkey::Pubkey, std::{collections::HashSet, sync::{Arc, RwLock}}
 };
 
-#[cfg_attr(feature = "frozen-abi", derive(AbiExample))]
-#[cfg_attr(
-    feature = "dev-context-only-utils",
-    field_qualifiers(slot(pub), epoch(pub))
-)]
-pub struct TransactionBatchProcessor<FG: ForkGraph> {
-    /// Bank slot (i.e. block)
-    slot: Slot,
 
-    /// Bank epoch
-    epoch: Epoch,
-
-    /// SysvarCache is a collection of system variables that are
-    /// accessible from on chain programs. It is passed to SVM from
-    /// client code (e.g. Bank) and forwarded to the MessageProcessor.
-    sysvar_cache: RwLock<SysvarCache>,
-
-    /// Programs required for transaction batch processing
-    pub program_cache: Arc<RwLock<ProgramCache<FG>>>,
-
-    /// Builtin program ids
-    pub builtin_program_ids: RwLock<HashSet<Pubkey>>,
+pub fn new_uninitialized<FG: ForkGraph>(slot: Slot, epoch: Epoch) -> TransactionBatchProcessor<FG> {
+    TransactionBatchProcessor::new_uninitialized(slot, epoch)
 }
 
-impl<FG: ForkGraph> Default for TransactionBatchProcessor<FG> {
-    fn default() -> Self {
-        Self {
-            slot: Slot::default(),
-            epoch: Epoch::default(),
-            sysvar_cache: RwLock::<SysvarCache>::default(),
-            program_cache: Arc::new(RwLock::new(ProgramCache::new(
-                Slot::default(),
-                Epoch::default(),
-            ))),
-            builtin_program_ids: RwLock::new(HashSet::new()),
-        }
-    }
-}
 
-impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
-    pub fn new_uninitialized(slot: Slot, epoch: Epoch) -> Self {
-        Self {
-            slot,
-            epoch,
-            program_cache: Arc::new(RwLock::new(ProgramCache::new(slot, epoch))),
-            ..Self::default()
-        }
-    }
-    pub fn just_wait(&self) {
-        sleep(Duration::from_millis(1000));
-    }
-}
+
+
+// #[cfg_attr(feature = "frozen-abi", derive(AbiExample))]
+// #[cfg_attr(
+//     feature = "dev-context-only-utils",
+//     field_qualifiers(slot(pub), epoch(pub))
+// )]
+// pub struct TransactionBatchProcessor<FG: ForkGraph> {
+//     /// Bank slot (i.e. block)
+//     slot: Slot,
+
+//     /// Bank epoch
+//     epoch: Epoch,
+
+//     /// SysvarCache is a collection of system variables that are
+//     /// accessible from on chain programs. It is passed to SVM from
+//     /// client code (e.g. Bank) and forwarded to the MessageProcessor.
+//     sysvar_cache: RwLock<SysvarCache>,
+
+//     /// Programs required for transaction batch processing
+//     pub program_cache: Arc<RwLock<ProgramCache<FG>>>,
+
+//     /// Builtin program ids
+//     pub builtin_program_ids: RwLock<HashSet<Pubkey>>,
+// }
+
+// impl<FG: ForkGraph> Default for TransactionBatchProcessor<FG> {
+//     fn default() -> Self {
+//         Self {
+//             slot: Slot::default(),
+//             epoch: Epoch::default(),
+//             sysvar_cache: RwLock::<SysvarCache>::default(),
+//             program_cache: Arc::new(RwLock::new(ProgramCache::new(
+//                 Slot::default(),
+//                 Epoch::default(),
+//             ))),
+//             builtin_program_ids: RwLock::new(HashSet::new()),
+//         }
+//     }
+// }
+
+// impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
+//     pub fn new_uninitialized(slot: Slot, epoch: Epoch) -> Self {
+//         Self {
+//             slot,
+//             epoch,
+//             program_cache: Arc::new(RwLock::new(ProgramCache::new(slot, epoch))),
+//             ..Self::default()
+//         }
+//     }
+//     pub fn just_wait(&self) {
+//         sleep(Duration::from_millis(1000));
+//     }
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 // use solana_program_runtime::loaded_programs::ForkGraph;
