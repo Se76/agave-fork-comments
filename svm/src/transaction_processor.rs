@@ -1270,7 +1270,9 @@ mod tests {
         ))
     }
 
-    struct TestForkGraph {}
+    struct TestForkGraph {
+        
+    }
 
     impl ForkGraph for TestForkGraph {
         fn relationship(&self, _a: Slot, _b: Slot) -> BlockRelation {
@@ -1346,6 +1348,62 @@ mod tests {
                 0,
             )
         }
+    }
+
+    #[test]
+    fn bench_load_and_execute_sanitized_transactions(){
+
+        let sanitized_message = new_unchecked_sanitized_message(Message {
+            account_keys: vec![Pubkey::new_from_array([0; 32])],
+            header: MessageHeader::default(),
+            instructions: vec![CompiledInstruction {
+                program_id_index: 0,
+                accounts: vec![],
+                data: vec![],
+            }],
+            recent_blockhash: Hash::default(),
+        });  
+
+        // Transactions, length 2.
+        let sanitized_txs = vec![
+            SanitizedTransaction::new_for_tests(
+                sanitized_message,
+                vec![Signature::new_unique()],
+                false,
+            );
+            2
+        ];
+
+        let batch_processor = TransactionBatchProcessor::<TestForkGraph>::new_uninitialized(1,1);
+        // let batch_processor = TransactionBatchProcessor::<TestForkGraph>::new(
+        //     1, 
+        //     1,
+        //     Arc::downgrade(&TestForkGraph),
+        // Some(Arc::new(
+        //     create_program_runtime_environment_v1(feature_set, compute_budget, false, false)
+        //         .unwrap(),
+        // )),
+        // None,
+            
+
+        // );
+        let callback = MockBankCallback::default(); 
+
+        let check_results = vec![
+            TransactionCheckResult::Ok(CheckedTransactionDetails {
+                nonce: None,
+                lamports_per_signature: 0
+            });
+            2
+        ];
+
+        batch_processor.load_and_execute_sanitized_transactions(
+            &callback,
+            &sanitized_txs,
+            check_results,
+            &TransactionProcessingEnvironment::default(),
+            &TransactionProcessingConfig::default(),
+        );
     }
 
     #[test_case(1; "Check results too small")]

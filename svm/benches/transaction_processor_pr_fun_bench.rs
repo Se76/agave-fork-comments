@@ -1,6 +1,6 @@
 #[cfg(feature = "dev-context-only-utils")]
 use qualifier_attr::{field_qualifiers, qualifiers};
-use solana_svm::bench_utilis::*;
+use solana_svm::{bench_utilis::*, transaction_processor::{TransactionProcessingConfig, TransactionProcessingEnvironment}};
 use {
     solana_client::rpc_client::RpcClient,
     solana_sdk::{
@@ -13,7 +13,7 @@ use {
 use {
     
         solana_svm::account_loader::{
-            collect_rent_from_account,  validate_fee_payer,  // load_transaction, AccountLoader
+            collect_rent_from_account,  validate_fee_payer,  AccountLoader,// load_transaction, AccountLoader
              CheckedTransactionDetails, LoadedTransaction, // AccountUsagePattern,
             TransactionCheckResult, TransactionLoadResult, ValidatedTransactionDetails,
         },
@@ -138,104 +138,324 @@ use {
         // solana_bpf_loader_program::syscalls::create_program_runtime_environment_v1,
     };
 
-// Dummy implementation of ForkGraph for testing purposes
-#[derive(Default)]
-struct DummyForkGraph;
 
-impl ForkGraph for DummyForkGraph {
-    fn relationship(&self, _a: solana_clock::Slot, _b: solana_clock::Slot) -> solana_program_runtime::loaded_programs::BlockRelation {
-        solana_program_runtime::loaded_programs::BlockRelation::Unknown
+
+
+
+
+
+
+
+    fn new_unchecked_sanitized_message(message: Message) -> SanitizedMessage {
+        SanitizedMessage::Legacy(LegacyMessage::new(
+            message,
+            &ReservedAccountKeys::empty_key_set(),
+        ))
     }
-}
 
+    struct TestForkGraph {}
 
-pub struct TestAccountLoader<'a> {
-    cache: RwLock<HashMap<Pubkey, AccountSharedData>>,
-    rpc_client: &'a RpcClient,
-}
-
-impl<'a> TestAccountLoader<'a> {
-    pub fn new(rpc_client: &'a RpcClient) -> Self {
-        Self {
-            cache: RwLock::new(HashMap::new()),
-            rpc_client,
+    impl ForkGraph for TestForkGraph {
+        fn relationship(&self, _a: Slot, _b: Slot) -> BlockRelation {
+            BlockRelation::Unknown
         }
     }
-}
 
-/// Implementation of the SVM API's `TransactionProcessingCallback` interface.
-///
-/// The SVM API requires this plugin be provided to provide the SVM with the
-/// ability to load accounts.
-///
-/// In the Agave validator, this implementation is Bank, powered by AccountsDB.
-impl TransactionProcessingCallback for TestAccountLoader<'_> {
-    fn get_account_shared_data(&self, pubkey: &Pubkey) -> Option<AccountSharedData> {
-        if let Some(account) = self.cache.read().unwrap().get(pubkey) {
-            return Some(account.clone());
+    #[derive(Default, Clone)]
+    pub struct MockBankCallback {
+        pub account_shared_data: Arc<RwLock<HashMap<Pubkey, AccountSharedData>>>,
+        #[allow(clippy::type_complexity)]
+        pub inspected_accounts:
+            Arc<RwLock<HashMap<Pubkey, Vec<(Option<AccountSharedData>, /* is_writable */ bool)>>>>,
+    }
+
+    impl TransactionProcessingCallback for MockBankCallback {
+        fn account_matches_owners(&self, account: &Pubkey, owners: &[Pubkey]) -> Option<usize> {
+            if let Some(data) = self.account_shared_data.read().unwrap().get(account) {
+                if data.lamports() == 0 {
+                    None
+                } else {
+                    owners.iter().position(|entry| data.owner() == entry)
+                }
+            } else {
+                None
+            }
         }
 
-        let account: AccountSharedData = self.rpc_client.get_account(pubkey).ok()?.into();
-        self.cache.write().unwrap().insert(*pubkey, account.clone());
+        fn get_account_shared_data(&self, pubkey: &Pubkey) -> Option<AccountSharedData> {
+            self.account_shared_data
+                .read()
+                .unwrap()
+                .get(pubkey)
+                .cloned()
+        }
 
-        Some(account)
+        fn add_builtin_account(&self, name: &str, program_id: &Pubkey) {
+            let mut account_data = AccountSharedData::default();
+            account_data.set_data(name.as_bytes().to_vec());
+            self.account_shared_data
+                .write()
+                .unwrap()
+                .insert(*program_id, account_data);
+        }
+
+        fn inspect_account(
+            &self,
+            address: &Pubkey,
+            account_state: AccountState,
+            is_writable: bool,
+        ) {
+            let account = match account_state {
+                AccountState::Dead => None,
+                AccountState::Alive(account) => Some(account.clone()),
+            };
+            self.inspected_accounts
+                .write()
+                .unwrap()
+                .entry(*address)
+                .or_default()
+                .push((account, is_writable));
+        }
     }
 
-    fn account_matches_owners(&self, account: &Pubkey, owners: &[Pubkey]) -> Option<usize> {
-        self.get_account_shared_data(account)
-            .and_then(|account| owners.iter().position(|key| account.owner().eq(key)))
-    }
-}
-
-    
-    /// Implementation of the SVM API's `TransactionProcessingCallback` interface.
-    ///
-    /// The SVM API requires this plugin be provided to provide the SVM with the
-    /// ability to load accounts.
-    ///
-    /// In the Agave validator, this implementation is Bank, powered by AccountsDB.
-    
-    
-
-// #[bench]
-fn my_benchmark<FG: ForkGraph>(c: &mut Criterion){
-    // let fork_graph = RwLock::new(DummyForkGraph::default());
-    let processor = TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
-    let feature_set = FeatureSet::default();
-    let compute_budget = ComputeBudget::default();
-    let fork_graph = Arc::new(RwLock::new(DummyForkGraph::default()));
-
-    c.bench_function("new_transaction_batch_processor", |b| {
-        b.iter(|| {
-            // Perform benchmarking logic
-            let processor = TransactionBatchProcessor::<DummyForkGraph>::new(
-                /* slot */ 1,
-                /* epoch */ 1,
-                Arc::downgrade(&fork_graph),
-                Some(Arc::new(
-                    create_program_runtime_environment_v1(&feature_set, &compute_budget, false, false)
-                        .unwrap(),
-                )),
+    impl<'a> From<&'a MockBankCallback> for AccountLoader<'a, MockBankCallback> {
+        fn from(callbacks: &'a MockBankCallback) -> AccountLoader<'a, MockBankCallback> {
+            AccountLoader::new_with_account_cache_capacity(
                 None,
+                ProgramCacheForTxBatch::default(),
+                HashMap::default(),
+                callbacks,
+                Arc::<FeatureSet>::default(),
+                0,
+            )
+        }
+    }
+
+    // #[test_case(1; "Check results too small")]
+    // #[test_case(3; "Check results too large")]
+    // #[should_panic(expected = "Length of check_results does not match length of sanitized_txs")]
+    fn test_check_results_txs_length_mismatch(check_results_len: usize) {
+        let sanitized_message = new_unchecked_sanitized_message(Message {
+            account_keys: vec![Pubkey::new_from_array([0; 32])],
+            header: MessageHeader::default(),
+            instructions: vec![CompiledInstruction {
+                program_id_index: 0,
+                accounts: vec![],
+                data: vec![],
+            }],
+            recent_blockhash: Hash::default(),
+        });
+
+        // Transactions, length 2.
+        let sanitized_txs = vec![
+            SanitizedTransaction::new_for_tests(
+                sanitized_message,
+                vec![Signature::new_unique()],
+                false,
             );
+            2
+        ];
+
+        let check_results = vec![
+            TransactionCheckResult::Ok(CheckedTransactionDetails {
+                nonce: None,
+                lamports_per_signature: 0
+            });
+            check_results_len
+        ];
+
+        let batch_processor = TransactionBatchProcessor::<TestForkGraph>::default();
+        let callback = MockBankCallback::default();
+
+        batch_processor.load_and_execute_sanitized_transactions(
+            &callback,
+            &sanitized_txs,
+            check_results,
+            &TransactionProcessingEnvironment::default(),
+            &TransactionProcessingConfig::default(),
+        );
+    }
 
 
-            // let a = TransactionBatchProcessor::load_and_execute_sanitized_transactions(
-            //     &processor, 
-            //     callbacks, 
-            //     sanitized_txs, 
-            //     check_results, 
-            //     environment, 
-            //     config
-            // );
-            
-            
-        })
-    });
-}
 
-criterion_group!(benches, my_benchmark<DummyForkGraph>);
+
+
+    fn bench_load_and_execute_sanitized_transactions<FG: ForkGraph>(c: &mut Criterion){
+        let sanitized_message = new_unchecked_sanitized_message(Message {
+            account_keys: vec![Pubkey::new_from_array([0; 32])],
+            header: MessageHeader::default(),
+            instructions: vec![CompiledInstruction {
+                program_id_index: 0,
+                accounts: vec![],
+                data: vec![],
+            }],
+            recent_blockhash: Hash::default(),
+        });  
+
+        // Transactions, length 2.
+        let sanitized_txs = vec![
+            SanitizedTransaction::new_for_tests(
+                sanitized_message,
+                vec![Signature::new_unique()],
+                false,
+            );
+            2
+        ];
+
+
+        let batch_processor = TransactionBatchProcessor::<TestForkGraph>::default();
+        let callback = MockBankCallback::default();
+    
+        c.bench_function("bench_load_and_execute_sanitized_transactions", |b| {
+            b.iter( || {
+
+                let check_results = vec![
+            TransactionCheckResult::Ok(CheckedTransactionDetails {
+                nonce: None,
+                lamports_per_signature: 0
+            });
+            2
+            ];
+                
+                batch_processor.load_and_execute_sanitized_transactions(
+                    &callback,
+                    &sanitized_txs,
+                    check_results,
+                    &TransactionProcessingEnvironment::default(),
+                    &TransactionProcessingConfig::default(),
+                );
+                
+            })
+        });
+    }
+
+criterion_group!(benches, bench_load_and_execute_sanitized_transactions<TestForkGraph>);
 criterion_main!(benches);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//     // Dummy implementation of ForkGraph for testing purposes
+// // #[derive(Default)]
+// // struct DummyForkGraph;
+
+// // impl ForkGraph for DummyForkGraph {
+// //     fn relationship(&self, _a: solana_clock::Slot, _b: solana_clock::Slot) -> solana_program_runtime::loaded_programs::BlockRelation {
+// //         solana_program_runtime::loaded_programs::BlockRelation::Unknown
+// //     }
+// // }
+
+
+// // pub struct TestAccountLoader<'a> {
+// //     cache: RwLock<HashMap<Pubkey, AccountSharedData>>,
+// //     rpc_client: &'a RpcClient,
+// // }
+
+// // impl<'a> TestAccountLoader<'a> {
+// //     pub fn new(rpc_client: &'a RpcClient) -> Self {
+// //         Self {
+// //             cache: RwLock::new(HashMap::new()),
+// //             rpc_client,
+// //         }
+// //     }
+// // }
+
+// /// Implementation of the SVM API's `TransactionProcessingCallback` interface.
+// ///
+// /// The SVM API requires this plugin be provided to provide the SVM with the
+// /// ability to load accounts.
+// ///
+// /// In the Agave validator, this implementation is Bank, powered by AccountsDB.
+// impl TransactionProcessingCallback for TestAccountLoader<'_> {
+//     fn get_account_shared_data(&self, pubkey: &Pubkey) -> Option<AccountSharedData> {
+//         if let Some(account) = self.cache.read().unwrap().get(pubkey) {
+//             return Some(account.clone());
+//         }
+
+//         let account: AccountSharedData = self.rpc_client.get_account(pubkey).ok()?.into();
+//         self.cache.write().unwrap().insert(*pubkey, account.clone());
+
+//         Some(account)
+//     }
+
+//     fn account_matches_owners(&self, account: &Pubkey, owners: &[Pubkey]) -> Option<usize> {
+//         self.get_account_shared_data(account)
+//             .and_then(|account| owners.iter().position(|key| account.owner().eq(key)))
+//     }
+// }
+
+    
+//     /// Implementation of the SVM API's `TransactionProcessingCallback` interface.
+//     ///
+//     /// The SVM API requires this plugin be provided to provide the SVM with the
+//     /// ability to load accounts.
+//     ///
+//     /// In the Agave validator, this implementation is Bank, powered by AccountsDB.
+    
+    
+
+// // #[bench]
+// fn my_benchmark<FG: ForkGraph>(c: &mut Criterion){
+//     // let fork_graph = RwLock::new(DummyForkGraph::default());
+//     let processor = TransactionBatchProcessor::<DummyForkGraph>::new_uninitialized(1, 1);
+//     let feature_set = FeatureSet::default();
+//     let compute_budget = ComputeBudget::default();
+//     let fork_graph = Arc::new(RwLock::new(DummyForkGraph::default()));
+
+
+//     let account_loader = TestAccountLoader::new(&self.rpc_client);
+
+
+//     c.bench_function("new_transaction_batch_processor", |b| {
+//         b.iter(|| {
+//             // Perform benchmarking logic
+//             let processor = TransactionBatchProcessor::<DummyForkGraph>::new(
+//                 /* slot */ 1,
+//                 /* epoch */ 1,
+//                 Arc::downgrade(&fork_graph),
+//                 Some(Arc::new(
+//                     create_program_runtime_environment_v1(&feature_set, &compute_budget, false, false)
+//                         .unwrap(),
+//                 )),
+//                 None,
+//             );
+
+
+//             // let a = TransactionBatchProcessor::load_and_execute_sanitized_transactions(
+//             //     &processor, 
+//             //     callbacks, 
+//             //     sanitized_txs, 
+//             //     check_results, 
+//             //     environment, 
+//             //     config
+//             // );
+            
+            
+//         })
+//     });
+// }
+
+// criterion_group!(benches, my_benchmark<DummyForkGraph>);
+// criterion_main!(benches);
 
 
 
