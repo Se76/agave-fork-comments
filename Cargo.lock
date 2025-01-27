@@ -9338,6 +9338,7 @@ dependencies = [
  "shuttle",
  "solana-account",
  "solana-bpf-loader-program",
+ "solana-client",
  "solana-clock",
  "solana-compute-budget",
  "solana-compute-budget-instruction",

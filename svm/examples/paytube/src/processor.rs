@@ -45,7 +45,7 @@ pub(crate) fn create_transaction_batch_processor<CB: TransactionProcessingCallba
     // slot (1).
     // This includes programs owned by BPF Loader v2, which are automatically
     // marked as "depoyed" in slot 0.
-    // See `solana_svm::program_loader::load_program_with_pubkey` for more
+    // See `solana_svm::program_loader::program_with_pubkey` for more
     // details.
     let processor = TransactionBatchProcessor::<PayTubeForkGraph>::new(
         /* slot */ 1,

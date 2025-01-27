@@ -10,6 +10,7 @@ license = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
+solana-client = { workspace = true}
 criterion = "0.5.1"
 ahash = { workspace = true }
 itertools = { workspace = true }
@@ -62,6 +63,7 @@ crate-type = ["lib"]
 name = "solana_svm"
 
 [dev-dependencies]
+solana-client = { workspace = true}
 assert_matches = { workspace = true }
 bincode = { workspace = true }
 ed25519-dalek = { workspace = true }
@@ -115,6 +117,12 @@ shuttle-test = [
     "solana-bpf-loader-program/shuttle-test",
     "solana-loader-v4-program/shuttle-test",
 ]
+
+# [workspace]
+# members = [
+#     "src",
+#     "benches",
+# ]
 
 [lints]
 workspace = true
