@@ -122,3 +122,8 @@ workspace = true
 [[bench]]
 name = "transaction_processor_bench"
 harness = false
+
+[[bench]]
+name = "transaction_processor_pr_fun_bench"
+harness = false
+
