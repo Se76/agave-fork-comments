@@ -375,34 +375,56 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
 
 
 
-    // pub fn new_uninitialized(slot: Slot, epoch: Epoch) -> Self {
-    //     Self {
-    //         slot,
-    //         epoch,
-    //         program_cache: Arc::new(RwLock::new(ProgramCache::new(slot, epoch))),
-    //         ..Self::default()
-    //     }
-    // }
+    pub fn new_uninitialized(slot: Slot, epoch: Epoch) -> Self {
+        Self {
+            slot,
+            epoch,
+            program_cache: Arc::new(RwLock::new(ProgramCache::new(slot, epoch))),
+            ..Self::default()
+        }
+    }
 
-    // pub fn new(
-    //     slot: Slot,
-    //     epoch: Epoch,
-    //     fork_graph: Weak<RwLock<FG>>,
-    //     program_runtime_environment_v1: Option<ProgramRuntimeEnvironment>,
-    //     program_runtime_environment_v2: Option<ProgramRuntimeEnvironment>,
-    // ) -> Self {
-    //     let processor = Self::new_uninitialized(slot, epoch);
-    //     {
-    //         let mut program_cache = processor.program_cache.write().unwrap();
-    //         program_cache.set_fork_graph(fork_graph);
-    //         processor.configure_program_runtime_environments_inner(
-    //             &mut program_cache,
-    //             program_runtime_environment_v1,
-    //             program_runtime_environment_v2,
-    //         );
-    //     }
-    //     processor
-    // }
+    pub fn new(
+        slot: Slot,
+        epoch: Epoch,
+        fork_graph: Weak<RwLock<FG>>,
+        program_runtime_environment_v1: Option<ProgramRuntimeEnvironment>,
+        program_runtime_environment_v2: Option<ProgramRuntimeEnvironment>,
+    ) -> Self {
+        let processor = Self::new_uninitialized(slot, epoch);
+        {
+            let mut program_cache = processor.program_cache.write().unwrap();
+            program_cache.set_fork_graph(fork_graph);
+            processor.configure_program_runtime_environments_inner(
+                &mut program_cache,
+                program_runtime_environment_v1,
+                program_runtime_environment_v2,
+            );
+        }
+        processor
+    }
+
+    fn configure_program_runtime_environments_inner(
+        &self,
+        program_cache: &mut ProgramCache<FG>,
+        program_runtime_environment_v1: Option<ProgramRuntimeEnvironment>,
+        program_runtime_environment_v2: Option<ProgramRuntimeEnvironment>,
+    ) {
+        let empty_loader = || {
+            Arc::new(BuiltinProgram::new_loader(
+                VmConfig::default(),
+                FunctionRegistry::default(),
+            ))
+        };
+
+        program_cache.latest_root_slot = self.slot;
+        program_cache.latest_root_epoch = self.epoch;
+        program_cache.environments.program_runtime_v1 =
+            program_runtime_environment_v1.unwrap_or(empty_loader());
+        program_cache.environments.program_runtime_v2 =
+            program_runtime_environment_v2.unwrap_or(empty_loader());
+    }
+
 
     fn validate_transaction_nonce_and_fee_payer<CB: TransactionProcessingCallback>(
         account_loader: &mut AccountLoader<CB>,
