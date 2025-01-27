@@ -119,7 +119,7 @@ use {
         test_case::test_case,
     };
 
-// use solana_program::feature;
+use solana_program::feature;
 // use solana_program_runtime::loaded_programs::ForkGraph;
 // use solana_svm::transaction_processor_test::*;
 use {
@@ -187,23 +187,6 @@ impl TransactionProcessingCallback for TestAccountLoader<'_> {
     }
 }
 
-
-
-
-
-    pub struct TestAccountLoader<'a> {
-        cache: RwLock<HashMap<Pubkey, AccountSharedData>>,
-        rpc_client: &'a RpcClient,
-    }
-    
-    impl<'a> TestAccountLoader<'a> {
-        pub fn new(rpc_client: &'a RpcClient) -> Self {
-            Self {
-                cache: RwLock::new(HashMap::new()),
-                rpc_client,
-            }
-        }
-    }
     
     /// Implementation of the SVM API's `TransactionProcessingCallback` interface.
     ///
@@ -211,23 +194,7 @@ impl TransactionProcessingCallback for TestAccountLoader<'_> {
     /// ability to load accounts.
     ///
     /// In the Agave validator, this implementation is Bank, powered by AccountsDB.
-    impl TransactionProcessingCallback for TestAccountLoader<'_> {
-        fn get_account_shared_data(&self, pubkey: &Pubkey) -> Option<AccountSharedData> {
-            if let Some(account) = self.cache.read().unwrap().get(pubkey) {
-                return Some(account.clone());
-            }
     
-            let account: AccountSharedData = self.rpc_client.get_account(pubkey).ok()?.into();
-            self.cache.write().unwrap().insert(*pubkey, account.clone());
-    
-            Some(account)
-        }
-    
-        fn account_matches_owners(&self, account: &Pubkey, owners: &[Pubkey]) -> Option<usize> {
-            self.get_account_shared_data(account)
-                .and_then(|account| owners.iter().position(|key| account.owner().eq(key)))
-        }
-    }
     
 
 // #[bench]
